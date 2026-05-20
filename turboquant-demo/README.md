@@ -224,6 +224,10 @@ hardware limit for a decode-bound workload.
 
 ## Why these two models have opposite hardware profiles
 
+This pipeline is the strongest possible real-system illustration of the roofline model — you can
+place both dots on the same chart and explain why they are optimized with completely different
+techniques.
+
 ```
 Arithmetic intensity (FLOP / byte)
                                    │
@@ -238,14 +242,29 @@ memory-bound                       │     ╱
                                               Arithmetic intensity →
 ```
 
+**BERT (encoder, batched):**
+- Processes the entire input sequence in a single parallel forward pass
+- High batch size, short sequences → matmuls dominate → high arithmetic intensity
+- Dot sits **right of the roofline** — compute-bound
+- Optimize with: tensor cores, larger batch size, sequence packing
+
+**LLM decode (autoregressive, one token at a time):**
+- Generates one token per step, reading all model weights and the entire KV cache each time
+- Low arithmetic intensity — almost all work is memory reads, not computation
+- Dot sits **left of the roofline** — memory-bound
+- Optimize with: memory bandwidth, KV compression (TurboQuant), speculative decode
+
 | | BERT | LLM decode |
 |---|---|---|
 | Operation | Full sequence in parallel | One token at a time |
 | Arithmetic intensity | High (matmuls over full batch) | Low (reads weights per step) |
-| Roofline position | Compute-bound | Memory-bound |
+| Roofline position | Compute-bound — right of knee | Memory-bound — left of knee |
 | Optimization lever | Tensor cores, batch size, sequence packing | Bandwidth, KV compression (TurboQuant) |
 
-Two models, opposite ends of the roofline, complementary roles in the same pipeline.
+Two models, completely opposite roofline positions, complementary roles in the same pipeline.
+The benchmark above shows the A4000 running at 75–90% of its 448 GB/s peak on the LLM decode
+path — that number is the empirical proof that the LLM is memory-bound and that reducing KV
+traffic (what TurboQuant does) is the right lever.
 
 ---
 
