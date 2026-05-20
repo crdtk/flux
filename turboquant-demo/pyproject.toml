@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "turboquant-demo"
+version = "0.1.0"
+description = "TurboQuant KV cache compression demo — fit recommendation pipeline"
+requires-python = ">=3.10"
+dependencies = [
+    "transformers",
+    "openai",
+    "streamlit",
+    "pynvml",
+    "huggingface_hub",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
