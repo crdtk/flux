@@ -300,6 +300,38 @@ same GQA architecture (28 layers, 4 KV heads, head\_dim=128) as the production t
 
 ---
 
+## What this demo proves in an interview
+
+This is no longer a benchmark — it's a system design. The progression is:
+
+| Step | What it shows |
+|---|---|
+| TurboQuant paper | You understand the research |
+| Roofline analysis | You understand the hardware |
+| Fit recommendation scenario | You understand the business problem |
+| Incremental KV pipeline | You designed a novel system on top of it |
+| 430ms end-to-end | You can quantify it |
+
+The statement you can make coming out of this:
+
+> *"I profiled TurboQuant's fused Triton decode attention kernel on SM86 (RTX A4000) using Nsight
+> Compute, identified uncoalesced uint8 loads as the primary bottleneck at 40% bandwidth utilization,
+> optimized the load pattern to achieve 76% of the 448 GB/s theoretical peak — translating to
+> +8–17% tok/s improvement across context lengths — and integrated it into a BERT-routed fit
+> recommendation pipeline that updates from customer return signal to on-screen recommendation
+> in under 500ms using incremental KV cache."*
+
+The non-obvious insight that separates systems thinking from model benchmarking:
+
+> **"Use LLM for everything"** → junior thinking  
+> **"BERT extracts, LLM reasons, route on confidence, profile aggregates so context shrinks not grows"** → systems thinking
+
+Most people assume more customer history means more tokens. Here, more history means higher-confidence
+structured profile, which means the LLM needs *fewer* tokens to reason decisively — not more.
+That's the gap most ML engineers can't cross in a design interview.
+
+---
+
 ## Reference
 
 **TurboQuant:** [arXiv:2504.19874](https://arxiv.org/abs/2504.19874) — ICLR 2026.
