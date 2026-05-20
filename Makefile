@@ -487,7 +487,13 @@ VENV_PIP       = VIRTUAL_ENV=$(VENV) $(UV) pip install
 DEMO_MODEL_HF  ?= casperhansen/deepseek-r1-distill-qwen-7b-awq
 DEMO_MODEL_DIR := $(MODEL_DIR)/$(notdir $(DEMO_MODEL_HF))
 
-.PHONY: bench-bert bench-tq bench-pipeline demo-servers demo-fit demo-model clean-demo
+# Locust defaults — override on the command line, e.g. LOCUST_USERS=8 make bench-locust
+LOCUST_USERS   ?= 4
+LOCUST_RATE    ?= 1
+LOCUST_TIME    ?= 60s
+LOCUST_CSV     ?= $(DEMO_DIR)/locust_results
+
+.PHONY: bench-bert bench-tq bench-pipeline demo-servers demo-fit demo-model bench-locust locust-ui clean-demo
 
 # ---- Stage 1: uv ----
 $(DEMO_SENTINEL)/uv-installed:
@@ -511,7 +517,8 @@ $(DEMO_SENTINEL)/demo-deps: $(DEMO_SENTINEL)/demo-venv
 	    pynvml \
 	    "huggingface_hub[cli]" \
 	    openai \
-	    triton
+	    triton \
+	    locust
 	$(VENV_PIP) -e "$(DEMO_DIR)"
 	@[ -n "$(TURBO_DIR)" ] && $(VENV_PIP) -e "$(TURBO_DIR)" || true
 	touch $@
@@ -550,6 +557,27 @@ demo-fit: $(DEMO_SENTINEL)/demo-deps
 	cd $(DEMO_DIR) && $(VENV)/bin/streamlit run turboquant_demo/app.py \
 	    --browser.gatherUsageStats false \
 	    --server.headless true
+
+bench-locust: $(DEMO_SENTINEL)/demo-deps
+	@curl -sf http://localhost:8000/health >/dev/null 2>&1 || \
+	    { echo ">>> TQ server not running — run: make demo-servers"; exit 1; }
+	@curl -sf http://localhost:8001/health >/dev/null 2>&1 || \
+	    { echo ">>> Baseline server not running — run: make demo-servers"; exit 1; }
+	cd $(DEMO_DIR) && $(VENV)/bin/locust \
+	    -f turboquant_demo/locustfile.py \
+	    --headless \
+	    -u $(LOCUST_USERS) -r $(LOCUST_RATE) -t $(LOCUST_TIME) \
+	    --csv $(LOCUST_CSV) \
+	    --host http://localhost:8000
+	@echo ">>> results: $(LOCUST_CSV)_stats.csv"
+
+locust-ui: $(DEMO_SENTINEL)/demo-deps
+	@curl -sf http://localhost:8000/health >/dev/null 2>&1 || \
+	    { echo ">>> TQ server not running — run: make demo-servers"; exit 1; }
+	@echo ">>> Locust UI at http://localhost:8089"
+	cd $(DEMO_DIR) && $(VENV)/bin/locust \
+	    -f turboquant_demo/locustfile.py \
+	    --host http://localhost:8000
 
 clean-demo:
 	-kill $$(cat /tmp/vllm-base.pid 2>/dev/null) 2>/dev/null; rm -f /tmp/vllm-base.pid
