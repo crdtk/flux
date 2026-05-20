@@ -95,17 +95,110 @@ The routing classifier is itself a fine-tuned BERT. It decides whether the LLM s
 
 ---
 
+## From batch job to real-time retention tool
+
+This is where the system becomes a product. The difference is whether you recompute or extend.
+
+**The naive pipeline (too slow):**
+
+```
+Customer submits return: "too tight in thighs"
+    ↓  100ms   feedback parsed and appended to history
+    ↓ 8,000ms  full re-inference over 50k-token history
+    ↓  100ms   recommendation pushed to UI
+────────────────────────────────────────────────────
+Total: ~8 seconds   ← user has already closed the tab
+```
+
+**The incremental KV pipeline:**
+
+The customer's existing history didn't change — only one new item was appended.
+If you store the compressed KV states from prior inference:
+
+```
+Existing 50k history:  KV already computed and stored (TQ-compressed)
+New return item:       ~250 tokens → compute only this delta
+Re-run attention:      fast forward pass over cached states
+
+New compute:  250 tokens instead of 50,000
+Complexity:   O(new tokens) instead of O(context length)
+```
+
+```
+Customer submits return: "too tight in thighs"
+    ↓   50ms   BERT extracts {item: Levi's 501, issue: thighs, direction: tight}
+    ↓   30ms   appended to TQ-compressed KV store (append-only log)
+    ↓  150ms   delta inference: 250 new tokens + attention over cached KV
+    ↓  150ms   speculative decode → "Based on your return of Levi's 501..."
+    ↓   50ms   push to UI
+────────────────────────────────────────────────────────────────────────────────
+Total: ~430ms   ← recommendation appears before they close the return screen
+```
+
+Sub-500 ms is the threshold where it feels like the UI responded to you, not like a job ran.
+
+**What this changes for the business:**
+
+| | Without incremental KV | With incremental KV + TQ |
+|---|---|---|
+| Recommendation update | Nightly batch job | While customer is on the return screen |
+| Customer sees | Updated suggestion tomorrow | *"Since you found these too tight in the thighs, customers with similar profiles prefer the 34W 30L or the relaxed fit in your usual size"* — before they close the tab |
+| Product role | Logistics tool | Retention tool |
+
+**The architecture:**
+
+```
+                    ┌─────────────────────────┐
+Customer action ───▶│  Feedback Service       │
+                    │  BERT parse + structure  │
+                    └────────────┬────────────┘
+                                 │ structured event
+                    ┌────────────▼────────────┐
+                    │  TQ KV Store            │
+                    │  append-only log        │◀─── cold precompute
+                    │  per-customer, indexed  │     at login / page load
+                    └────────────┬────────────┘
+                                 │ delta (~2 KB per interaction)
+                    ┌────────────▼────────────┐
+                    │  Recommendation Engine  │
+                    │  delta inference only   │
+                    │  + speculative decode   │
+                    └────────────┬────────────┘
+                                 │
+                    ┌────────────▼────────────┐
+                    │  Push to UI             │
+                    │  SSE / WebSocket        │
+                    └─────────────────────────┘
+```
+
+The TQ-compressed KV store is the novel piece — a persistent, append-only cache of each customer's
+inference history in compressed form. Each new interaction adds ~2 KB (250 tokens × 3b key / 2b val)
+rather than recomputing 50k tokens from scratch.
+
+---
+
 ## Full latency picture
 
 | Path | Latency | Triggered by |
 |---|---|---|
-| BERT → lookup | 8 ms | clear fit signal |
+| BERT → lookup | 8 ms | clear fit signal (95% of traffic) |
 | BERT → LLM (cold, full history) | 5–8 s | first-ever recommendation |
-| BERT → LLM (warm, incremental KV) | 450 ms | new item, complex case |
-| BERT → structured profile → LLM | **80 ms** | complex case, profile exists |
+| BERT → LLM (warm, incremental KV) | **430 ms** | new return, KV cache warm |
+| BERT → structured profile → LLM | 80 ms | complex case, profile exists |
 
-The last row is the production sweet spot. BERT compresses history offline; the LLM reasons over
-the summary in real-time.
+**Component breakdown (warm path):**
+
+| Component | Latency | Bottleneck |
+|---|---|---|
+| BERT extraction | 20–50 ms | GPU compute |
+| KV store append (TQ-compressed) | 10–30 ms | memory write |
+| Delta inference (250 new tokens) | 80–150 ms | GPU compute |
+| Speculative decode (128-token response) | 80–150 ms | GPU memory bandwidth |
+| Push to UI | 20–50 ms | network |
+| **Total** | **210–430 ms** | |
+
+Cold inference (first visit, full history) takes 3–8 s — acceptable as a page-load precompute,
+not acceptable as a real-time response. The incremental path is what enables the real-time product.
 
 ---
 
