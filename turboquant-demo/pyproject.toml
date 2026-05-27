@@ -13,6 +13,7 @@ dependencies = [
     "streamlit",
     "pynvml",
     "huggingface_hub",
+    "pyspark",
 ]
 
 [tool.setuptools.packages.find]
