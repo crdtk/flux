@@ -366,6 +366,9 @@ analysis (long-context stress test).
 
 ```
 turboquant-demo/
+
+├── dags/
+│   └── fit_profile_pipeline.py  # Airflow DAG: wait_for_partition → 
 ├── turboquant_demo/
 │   ├── bert.py          # zero-shot NLI fit-signal extraction
 │   ├── pipeline.py      # PySpark batch job: BERT at scale → customer profiles
