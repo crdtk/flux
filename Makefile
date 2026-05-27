@@ -493,7 +493,7 @@ LOCUST_RATE    ?= 1
 LOCUST_TIME    ?= 60s
 LOCUST_CSV     ?= $(DEMO_DIR)/locust_results
 
-.PHONY: bench-bert bench-tq bench-pipeline demo-servers demo-fit demo-model bench-locust locust-ui clean-demo
+.PHONY: bench-bert bench-tq bench-pipeline bench-spark demo-servers demo-fit demo-model bench-locust locust-ui clean-demo
 
 # ---- Stage 1: uv ----
 $(DEMO_SENTINEL)/uv-installed:
@@ -518,7 +518,8 @@ $(DEMO_SENTINEL)/demo-deps: $(DEMO_SENTINEL)/demo-venv
 	    "huggingface_hub[cli]" \
 	    openai \
 	    triton \
-	    locust
+	    locust \
+	    pyspark
 	$(VENV_PIP) -e "$(DEMO_DIR)"
 	@[ -n "$(TURBO_DIR)" ] && $(VENV_PIP) -e "$(TURBO_DIR)" || true
 	touch $@
@@ -543,6 +544,13 @@ bench-tq: $(DEMO_SENTINEL)/demo-deps
 	    { echo ">>> Baseline server not running — run: make demo-servers"; exit 1; }
 	cd $(DEMO_DIR) && $(VENV_PY) -m turboquant_demo.sweep
 	@echo ">>> results: $(DEMO_DIR)/bench_results.json"
+
+bench-spark: $(DEMO_SENTINEL)/demo-deps
+	cd $(DEMO_DIR) && $(VENV_PY) -m turboquant_demo.pipeline \
+	    --generate \
+	    --input  data/returns.parquet \
+	    --output data/profiles.parquet
+	@echo ">>> profiles: $(DEMO_DIR)/data/profiles.parquet"
 
 bench-pipeline: $(DEMO_SENTINEL)/demo-deps
 	@curl -sf http://localhost:8000/health >/dev/null 2>&1 || \
