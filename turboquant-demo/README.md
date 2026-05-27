@@ -368,6 +368,7 @@ analysis (long-context stress test).
 turboquant-demo/
 ├── turboquant_demo/
 │   ├── bert.py          # zero-shot NLI fit-signal extraction
+│   ├── pipeline.py      # PySpark batch job: BERT at scale → customer profiles
 │   ├── sweep.py         # tok/s + GB/s benchmark across context lengths
 │   ├── latency.py       # end-to-end pipeline latency measurement
 │   ├── app.py           # Streamlit side-by-side streaming UI
