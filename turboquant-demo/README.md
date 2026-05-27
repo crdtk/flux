@@ -177,6 +177,69 @@ rather than recomputing 50k tokens from scratch.
 
 ---
 
+## Offline Feature Pipeline (PySpark)
+
+The lookup table that serves 95% of traffic at 2 ms is pre-built by a daily batch job. The job reads
+the full customer return history from the datalake, runs BERT extraction at scale via a PySpark
+`pandas_udf`, aggregates a fit profile per customer, and writes the result to Parquet on S3.
+
+```
+Return events (Parquet on S3 / Delta)
+         │
+         ▼
+  PySpark job (Databricks)
+  ├── groupBy(customer_id)
+  ├── collect return_text per customer
+  ├── pandas_udf → extract_fit_signal (BERT, loads once per partition)
+  └── agg: signals[], n_returns, avg_confidence
+         │
+         ▼
+  Customer profiles (Parquet on S3)
+         │
+         ▼
+  Lookup table — serves 95% path at 2 ms
+```
+
+The key pattern is the `pandas_udf` wrapping the existing BERT singleton:
+
+```python
+@pandas_udf(_SIGNAL_SCHEMA)
+def _encode(texts: pd.Series) -> pd.DataFrame:
+    return pd.DataFrame([extract_fit_signal(t) for t in texts])
+
+profiles = (
+    spark.read.parquet(input_path)
+    .withColumn("signal", _encode(col("return_text")))
+    .groupBy("customer_id")
+    .agg(
+        collect_list(struct("direction", "confidence", "regions")).alias("signals"),
+        avg("confidence").alias("avg_confidence"),
+    )
+)
+profiles.write.mode("overwrite").parquet(output_path)
+```
+
+`_get_clf()` in `bert.py` is a module-level lazy singleton. PySpark initialises each partition in a
+separate worker process, so the NLI model loads once per process — not once per row. Arrow-backed
+`pandas_udf` then passes the entire partition as a `pd.Series` in a single call, avoiding per-row
+Python overhead.
+
+**Cold-start:** New customers have no return history and no entry in the lookup table. They fall
+through to the LLM path automatically. The next daily job picks them up once they have at least one
+return event, moving them to the 2 ms fast path.
+
+**Orchestration:** In production this job runs as an Airflow DAG on Databricks, triggered after the
+return events partition lands in S3. The DAG has three tasks: `wait_for_partition →
+spark_submit_pipeline → update_lookup_table`.
+
+Run locally:
+
+```bash
+make bench-spark       # generates 1 000 synthetic returns, builds profiles, prints summary
+```
+
+---
+
 ## Full latency picture
 
 | Path | Latency | Triggered by |
