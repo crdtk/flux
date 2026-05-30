@@ -1,0 +1,21 @@
+- [User Profile](user_profile.md) — hardware builder, local LLM inference, Berlin, cost-conscious
+- [Feedback: Minimal Verbosity](feedback_verbosity.md) — minimal tables, clickable URLs, no unnecessary warnings
+- [Feedback: Always Search Online](feedback_always_search.md) — never recommend from memory, always verify specs/prices/availability online first
+- [Feedback: Consult Project Sources](feedback_consult_project_sources.md) — when a manual/datasheet/BOM is in the project, grep it BEFORE answering domain questions, not after
+- [Feedback: Respect User Edits](feedback_respect_user_edits.md) — read user's manual edits and state intent before making further changes, never revert simplifications
+- [Feedback: Keep Files Updated](feedback_keep_files_updated.md) — incremental edits with visibility, user reads and contributes in parallel
+- [Feedback: Inline .PHONY](feedback_inline_phony.md) — co-locate `.PHONY` with each target, no consolidated top-of-file list
+- [Feedback: Makefile Workflow](feedback_makefile_workflow.md) — never set things up via ad-hoc SSH/bash; always write the Makefile target first
+- [Feedback: Variables Above First Use](feedback_variables_above_first_use.md) — define each variable immediately above the target that first uses it
+- [Feedback: Make Pattern Rules](feedback_make_pattern_rules.md) — `$*` only works with patterns; prefer plain `%` rules over static-pattern unless safety constraint is needed
+- [Feedback: Always Test Makefile Changes](feedback_makefile_test.md) — run `make -n <target>` and `make -p` after every edit to verify parse and variable values
+- [Feedback: Exhaust Automation / Target Dependencies](feedback_automation_devex.md) — every Make target must be self-sufficient; wire all prerequisites as dependencies, never leave manual steps
+- [Feedback: Avoid sudo](feedback_avoid_sudo.md) — default to non-root; use local sentinels, user-writable paths; only escalate when the op genuinely requires root
+- [Feedback: Prefer One-Liners](feedback_one_liners.md) — use `$(if ...)` over ifeq/else/endif when it fits on one line; one-liners first in Makefiles
+- [Project: SODIMM GPU Build](project_sodimm_gpu_build.md) — 4x RTX PRO 6000 Max-Q via PEX88048 switch on E3C256D4I-2T, mobo ordered 2026-04-07
+- [Project: Workstation Usage](project_workstation_usage.md) — NOT headless, user sits in front with keyboard + multi-monitor, desktop OS required
+- [Project: References Structure](project_references_structure.md) — semantic folders by hardware subsystem, not chronological or file-type based
+- [Reference: RTX PRO 6000 Max-Q Specs](reference_rtx_pro_6000_maxq.md) — 96GB GDDR7, 1.8 TB/s, 300W, blower
+- [Reference: German Retailers](reference_german_retailers.md) — trusted DE shops for this build
+- [Reference: LGA1200 Bifurcation Ceiling](reference_lga1200_bifurcation.md) — x8x8/x8x4x4 max, no x4x4x4x4; E-2314 rationale; bifurcation riser options
+- [Feedback: Describe Components Physically](feedback_describe_components.md) — always explain what a part IS physically, not just model/connector number
