@@ -1,0 +1,14 @@
+# Claude session data
+.claude/conversation.jsonl
+.claude/settings.local.json
+
+# Build artifacts
+.sentinel/
+.playwright-mcp/
+
+# IDE
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
