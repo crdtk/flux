@@ -17,14 +17,18 @@ APT := apt-get -o DPkg::Lock::Timeout=-1
 
 .PHONY: level-0 ## Foundational packages required for the rest of the packages install
 level-0:
+	systemctl disable --now pop-shop backuppc urbackup-client urbackupclientbackend apache2 postfix xrdp xrdp-sesman x2goserver rpcbind touchegg webmin ollama nmbd smbd samba pop-upgrade thermald 2>/dev/null || true
+	apt purge -y pop-shop backuppc urbackup-client apache2 postfix xrdp x2goserver rpcbind touchegg webmin samba nmbd smbd pop-upgrade thermald 2>/dev/null || true
+	snap remove --purge ollama 2>/dev/null || true
+	rm -f /usr/local/bin/ollama /etc/systemd/system/ollama.service
+	systemctl daemon-reload
 	systemctl stop packagekit 2>/dev/null || true
 	systemctl mask packagekit
 	mkdir -p /etc/PackageKit
 	dpkg-divert --divert /etc/PackageKit/20packagekit.distrib --rename /etc/apt/apt.conf.d/20packagekit
-	$(APT) install -y apt-file git syncthing cockpit avahi-daemon
+	$(APT) install -y apt-file git syncthing cockpit avahi-daemon arp-scan nmap nodejs npm
 	apt-file update
 	@echo ">>> Bootstrap done. Run: sudo make"
-
 
 
 .PHONY: level-1 ## Installs INSTALL targets not yet present on this machine
@@ -39,7 +43,6 @@ HARDENING := \
   /etc/systemd/system/suspend.target \
   /etc/modprobe.d/blacklist-nouveau.conf \
   /etc/modprobe.d/nvidia-power.conf \
-  .sentinel/nvidia-suspend-enabled \
   .sentinel/pam-sss-fixed \
   .sentinel/grub-timeout-set \
   .sentinel/initramfs-updated
@@ -53,11 +56,12 @@ MANAGEMENT := \
 PKG_APPS := \
   /usr/bin/code \
   /usr/bin/google-chrome \
-  /usr/bin/lmstudio
+  /usr/bin/lmstudio \
+  /usr/bin/npm
 
 # GPU compute stack — large downloads, runs last
 UBUNTU_VER          := $(shell lsb_release -rs 2>/dev/null | tr -d '.')
-SYS_SM              := $(shell nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d '.')
+SYS_SM              := $(shell nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d '.' | grep -oE '^[0-9]+')
 CUDA_PKG            := $(if $(shell [ -n "$(SYS_SM)" ] && [ "$(SYS_SM)" -lt 75 ] && echo 1),cuda-toolkit-12-6,cuda-toolkit)
 CUDA_VER            := $(shell echo $(CUDA_PKG) | grep -oE '[0-9]+-[0-9]+$$' | tr '-' '.')
 NVCC                := $(if $(CUDA_VER),/usr/local/cuda-$(CUDA_VER)/bin/nvcc,/usr/local/cuda/bin/nvcc)
@@ -157,7 +161,9 @@ ST_CONFIG_XML  = $(USER_HOME)/.config/syncthing/config.xml
 ST_STATE_XML   = $(USER_HOME)/.local/state/syncthing/config.xml
 ST_GUI_JSON    = {"address":"0.0.0.0:8384","user":"$(ST_USER)","password":"$(ST_PASS)"}
 
-.sentinel/syncthing-gui-remote: .sentinel/syncthing-enabled | .sentinel
+ST_WANTS      := $(USER_HOME)/.config/systemd/user/default.target.wants/syncthing.service
+
+.sentinel/syncthing-gui-remote: $(ST_WANTS) | .sentinel
 	@echo ">>> Waiting for Syncthing API..."
 	@for i in $$(seq 30); do curl -sf $(ST_API_URL)/rest/noauth/health >/dev/null 2>&1 && break || sleep 1; done
 	@curl -sS -X PATCH $(ST_API_URL)/rest/config/gui \
@@ -167,11 +173,10 @@ ST_GUI_JSON    = {"address":"0.0.0.0:8384","user":"$(ST_USER)","password":"$(ST_
 	@touch $@
 	@echo ">>> Syncthing GUI remote enabled"
 
-.sentinel/syncthing-enabled: /usr/bin/syncthing | .sentinel
+$(ST_WANTS): /usr/bin/syncthing
 	loginctl enable-linger $(RUN_AS_USER)
 	sudo -u $(RUN_AS_USER) env XDG_RUNTIME_DIR=/run/user/$(RUN_AS_UID) \
 		systemctl --user enable --now syncthing
-	touch $@
 	@echo ">>> Syncthing enabled"
 
 MACHINE_IP := $(shell hostname -I | awk '{print $$1}')
@@ -207,10 +212,6 @@ endef
 	$(file >$@,$(NVIDIA_POWER_CONF))
 	@echo ">>> NVIDIA power options set"
 
-.sentinel/nvidia-suspend-enabled: | .sentinel
-	systemctl enable nvidia-suspend.service nvidia-resume.service nvidia-hibernate.service
-	touch $@
-	@echo ">>> NVIDIA suspend/resume services enabled"
 
 CUDA_MATH_H   := /usr/local/cuda/targets/x86_64-linux/include/crt/math_functions.h
 CUDA_MATH_HPP := /usr/local/cuda/targets/x86_64-linux/include/crt/math_functions.hpp
@@ -265,7 +266,9 @@ APPS      = $(foreach u,$(APPS_URLS),$(APPS_DIR)/$(notdir $(u)))
 ICONS_DIR := $(USER_HOME)/.local/share/icons
 DESK_DIR  := $(USER_HOME)/.local/share/applications
 
-setup: $(APPS) make-completion
+CLAUDE_BIN := $(USER_HOME)/.local/bin/claude
+
+setup: $(APPS) $(CLAUDE_BIN) make-completion
 	kbuildsycoca6
 
 $(APPS_DIR)/%: | $(APPS_DIR)
@@ -286,6 +289,14 @@ $(APPS_DIR)/%: | $(APPS_DIR)
 $(APPS_DIR):
 	mkdir -p $@
 
+
+/usr/bin/npm: /usr/bin/nodejs
+	$(APT) install -y npm
+
+$(CLAUDE_BIN):
+	mkdir -p $(dir $@)
+	@command -v npm >/dev/null 2>&1 || { echo ">>> npm not found — run: sudo make first"; exit 1; }
+	npm install --prefix $(USER_HOME)/.local -g @anthropic-ai/claude-code
 
 .PHONY: make-completion
 BASHRC          = $(USER_HOME)/.bashrc
@@ -314,6 +325,35 @@ merge:
 		ln -sf "$$f" "$(MERGED)/$$folder/$${dev}_$$file"; \
 	done
 	@echo ">>> Merge complete"
+
+# ----------------------------------------------------------
+# Network
+# ----------------------------------------------------------
+
+BMC_MAC := 9c:6b:00:47:28:34
+
+.PHONY: find-bmc
+find-bmc:
+	@sudo nmap -sn $(shell ip route | awk '/proto kernel/{print $$1}' | head -1) 2>/dev/null | grep -B1 -i '$(BMC_MAC)' || echo "BMC not found — try: sudo arp-scan --localnet | grep $(BMC_MAC)"
+
+.PHONY: check-gpus
+check-gpus:
+	@echo "=== NVIDIA devices ==="
+	@ssh crucible lspci -d 10de: || true
+	@echo ""
+	@echo "=== PCIe link errors (dmesg) ==="
+	@ssh crucible sudo dmesg | grep -iE 'pcie|aer|link|nvidia|nvrm' | tail -30
+
+.PHONY: test-pex
+test-pex:
+	@echo "=== PCIe tree ==="
+	@ssh crucible lspci -t
+	@echo ""
+	@echo "=== PEX88048 bridges (PLX 10b5:8748) ==="
+	@ssh crucible lspci -d 10b5: -v
+	@echo ""
+	@echo "=== All bridges ==="
+	@ssh crucible lspci | grep -i bridge
 
 # ----------------------------------------------------------
 # SN8100
@@ -454,6 +494,10 @@ deploy:
 	@ssh crucible.local mkdir -p ~/Code/hardware
 	@rsync -av Makefile crucible.local:~/Code/hardware/
 	@ssh -tt crucible.local 'cd ~/Code/hardware && exec $$SHELL'
+
+.PHONY: audit-services
+audit-services:
+	@systemctl list-units --type=service --state=running --no-pager | grep -vE 'dbus|getty|systemd|udev|network|bluetooth|audio|cups|avahi|ssh|cron|gdm|display|polkit|rtkit|login|accounts|power|udisk|mount|fstrim|kernel|irq|cpu|nvidia|snapd'
 
 ## Wipe llama.cpp build — hardware is re-assessed at parse time on next run
 .PHONY: clean-infer
