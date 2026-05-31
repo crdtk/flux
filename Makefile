@@ -18,7 +18,7 @@ APT := apt-get -o DPkg::Lock::Timeout=-1
 .PHONY: level-0 ## Foundational packages required for the rest of the packages install
 level-0:
 	systemctl disable --now pop-shop backuppc urbackup-client urbackupclientbackend apache2 postfix xrdp xrdp-sesman x2goserver rpcbind touchegg webmin ollama nmbd smbd samba pop-upgrade thermald 2>/dev/null || true
-	apt purge -y pop-shop backuppc urbackup-client apache2 postfix xrdp x2goserver rpcbind touchegg webmin samba nmbd smbd pop-upgrade thermald 2>/dev/null || true
+	apt purge -y pop-shop backuppc urbackup-client apache2 postfix xrdp x2goserver rpcbind touchegg webmin samba nmbd smbd pop-upgrade thermald cockpit-packagekit 2>/dev/null || true
 	snap remove --purge ollama 2>/dev/null || true
 	rm -f /usr/local/bin/ollama /etc/systemd/system/ollama.service
 	systemctl daemon-reload
@@ -26,7 +26,10 @@ level-0:
 	systemctl mask packagekit
 	mkdir -p /etc/PackageKit
 	dpkg-divert --divert /etc/PackageKit/20packagekit.distrib --rename /etc/apt/apt.conf.d/20packagekit
-	$(APT) install -y apt-file git syncthing cockpit avahi-daemon arp-scan nmap nodejs npm
+	$(APT) install -y apt-file git syncthing cockpit avahi-daemon arp-scan nmap nodejs npm mc libheif1 libheif-examples gwenview
+	echo "deb http://archive.ubuntu.com/ubuntu jammy-backports main universe" > /etc/apt/sources.list.d/jammy-backports.list
+	$(APT) update
+	$(APT) install -y -t jammy-backports cockpit cockpit-files
 	apt-file update
 	@echo ">>> Bootstrap done. Run: sudo make"
 
@@ -39,10 +42,12 @@ DEB_URLS      := https://dl.google.com/linux/direct/google-chrome-stable_current
                  https://installers.lmstudio.ai/linux/x64/0.4.7-4/LM-Studio-0.4.7-4-x64.deb
 
 # System stability: freeze/crash prevention, driver fixes, boot config
+HAS_BMC   := $(shell dmidecode -t 38 2>/dev/null | grep -c 'IPMI Device Information')
 HARDENING := \
   /etc/systemd/system/suspend.target \
   /etc/modprobe.d/blacklist-nouveau.conf \
   /etc/modprobe.d/nvidia-power.conf \
+  /etc/systemd/system/openipmi.service \
   .sentinel/pam-sss-fixed \
   .sentinel/grub-timeout-set \
   .sentinel/initramfs-updated
@@ -50,14 +55,28 @@ HARDENING := \
 # Remote access and observability
 MANAGEMENT := \
   /etc/systemd/system/sockets.target.wants/cockpit.socket \
+  /usr/share/cockpit/files \
+  /etc/ssh/sshd_config.d/lan-password.conf \
   .sentinel/syncthing-gui-remote
 
 # Desktop applications
+IMAGETHUMB_DESKTOP  := /usr/share/kservices5/imagethumbnail.desktop
+HEIF_THUMB_OK       := $(shell grep -c 'image/heif' $(IMAGETHUMB_DESKTOP) 2>/dev/null)
+HEIF_THUMB_TARGET   := $(and $(filter 0,$(HEIF_THUMB_OK)),$(IMAGETHUMB_DESKTOP))
+.PHONY: $(HEIF_THUMB_TARGET)
+
+KIMG_HEIF_SO := /usr/lib/x86_64-linux-gnu/qt5/plugins/imageformats/kimg_heif.so
+
 PKG_APPS := \
   /usr/bin/code \
   /usr/bin/google-chrome \
+  /usr/bin/gwenview \
+  /usr/bin/heif-convert \
   /usr/bin/lmstudio \
-  /usr/bin/npm
+  /usr/bin/mc \
+  /usr/bin/npm \
+  $(KIMG_HEIF_SO) \
+  $(HEIF_THUMB_TARGET)
 
 # GPU compute stack — large downloads, runs last
 UBUNTU_VER          := $(shell lsb_release -rs 2>/dev/null | tr -d '.')
@@ -68,6 +87,8 @@ NVCC                := $(if $(CUDA_VER),/usr/local/cuda-$(CUDA_VER)/bin/nvcc,/us
 CUDA_LIST           := /etc/apt/sources.list.d/cuda-ubuntu$(UBUNTU_VER)-x86_64.list
 CUDA_SYMLINK_SENTINEL := $(if $(CUDA_VER),/usr/local/cuda,)
 
+WHISPER_TARGET := $(USER_HOME)/.local/share/whisper-venv/lib/python3.12/site-packages/faster_whisper
+
 COMPUTE := \
   /usr/bin/nvidia-smi \
   $(CUDA_LIST) \
@@ -75,7 +96,8 @@ COMPUTE := \
   $(CUDA_SYMLINK_SENTINEL) \
   /usr/bin/cmake \
   /usr/bin/g++-14 \
-  .sentinel/cuda-rsqrt-patched
+  .sentinel/cuda-rsqrt-patched \
+  $(WHISPER_TARGET)
 
 INSTALL := $(HARDENING) $(MANAGEMENT) $(PKG_APPS) $(COMPUTE)
 PENDING := $(filter-out $(wildcard $(INSTALL)),$(INSTALL))
@@ -181,9 +203,32 @@ $(ST_WANTS): /usr/bin/syncthing
 
 MACHINE_IP := $(shell hostname -I | awk '{print $$1}')
 
+LAN_SUBNET := $(shell ip route | awk '/proto kernel/{print $$1}' | head -1)
+
+define SSH_LAN_PASSWORD_CONF
+PasswordAuthentication no
+
+Match Address $(LAN_SUBNET),127.0.0.1
+	PasswordAuthentication yes
+endef
+
+/etc/ssh/sshd_config.d/lan-password.conf:
+	$(file >$@,$(SSH_LAN_PASSWORD_CONF))
+	systemctl reload ssh
+	@echo ">>> SSH password auth restricted to LAN ($(LAN_SUBNET))"
+
 /etc/systemd/system/sockets.target.wants/cockpit.socket: /usr/bin/cockpit
 	systemctl enable --now cockpit.socket
 	@echo ">>> Cockpit: https://$(MACHINE_IP):9090"
+
+# cockpit-files requires cockpit >= 318; jammy ships 264 — upgrade via backports
+/usr/share/cockpit/files: /etc/apt/sources.list.d/jammy-backports.list
+	$(APT) install -y -t jammy-backports cockpit cockpit-files
+
+/etc/apt/sources.list.d/jammy-backports.list:
+	echo "deb http://archive.ubuntu.com/ubuntu jammy-backports main universe" > $@
+	$(APT) update
+
 
 GRUB_TIMEOUT := 3
 
@@ -193,6 +238,11 @@ GRUB_TIMEOUT := 3
 
 /usr/bin/nvidia-smi:
 	ubuntu-drivers install
+
+.sentinel/initramfs-updated: /etc/modprobe.d/blacklist-nouveau.conf /etc/modprobe.d/nvidia-power.conf | .sentinel
+	update-initramfs -u
+	touch $@
+	@echo ">>> initramfs updated"
 
 define BLACKLIST_NOUVEAU
 blacklist nouveau
@@ -211,6 +261,17 @@ endef
 /etc/modprobe.d/nvidia-power.conf:
 	$(file >$@,$(NVIDIA_POWER_CONF))
 	@echo ">>> NVIDIA power options set"
+
+/etc/systemd/system/openipmi.service:
+ifeq ($(HAS_BMC),0)
+	@echo ">>> No BMC detected — masking and purging openipmi"
+	systemctl mask openipmi
+	apt purge -y openipmi 2>/dev/null || true
+else
+	@echo ">>> BMC detected — enabling openipmi"
+	apt install -y openipmi
+	systemctl enable --now openipmi
+endif
 
 
 CUDA_MATH_H   := /usr/local/cuda/targets/x86_64-linux/include/crt/math_functions.h
@@ -242,11 +303,6 @@ endef
 	touch $@
 	@echo ">>> CUDA math_functions patched for glibc 2.41"
 
-.sentinel/initramfs-updated: /etc/modprobe.d/blacklist-nouveau.conf /etc/modprobe.d/nvidia-power.conf | .sentinel
-	update-initramfs -u
-	touch $@
-	@echo ">>> initramfs updated"
-
 .sentinel/pam-sss-fixed: | .sentinel
 	grep -rl pam_sss /etc/pam.d/ 2>/dev/null | xargs -r sed -i '/pam_sss/d'
 	touch $@
@@ -268,8 +324,29 @@ DESK_DIR  := $(USER_HOME)/.local/share/applications
 
 CLAUDE_BIN := $(USER_HOME)/.local/bin/claude
 
-setup: $(APPS) $(CLAUDE_BIN) make-completion
-	kbuildsycoca6
+SSH_KEY := $(USER_HOME)/.ssh/id_ed25519
+
+$(USER_HOME)/.ssh/authorized_keys: $(SSH_KEY)
+	cat $(SSH_KEY).pub >> $@
+	chmod 600 $@
+	@echo ">>> SSH key authorized for localhost"
+
+$(SSH_KEY):
+	ssh-keygen -t ed25519 -f $@ -N ""
+	@echo ">>> SSH key generated: $@"
+
+DOLPHIN_PREVIEW_OK     := $(shell grep -c '^Show Preview=true' $(USER_HOME)/.config/kdeglobals 2>/dev/null)
+DOLPHIN_PREVIEW_TARGET := $(and $(filter 0,$(DOLPHIN_PREVIEW_OK)),.sentinel/dolphin-show-preview)
+
+KBUILDSYCOCA := $(or $(wildcard /usr/bin/kbuildsycoca6),$(wildcard /usr/bin/kbuildsycoca5))
+
+setup: $(APPS) $(CLAUDE_BIN) $(USER_HOME)/.ssh/authorized_keys $(DOLPHIN_PREVIEW_TARGET) make-completion
+	$(KBUILDSYCOCA)
+
+.sentinel/dolphin-show-preview: | .sentinel
+	kwriteconfig5 --file kdeglobals --group "KFileDialog Settings" --key "Show Preview" true
+	touch $@
+	@echo ">>> Dolphin show preview enabled"
 
 $(APPS_DIR)/%: | $(APPS_DIR)
 	curl -fL --retry 5 --retry-delay 3 --progress-bar -A "Mozilla/5.0" $(filter %/$*,$(APPS_URLS)) -o $@
@@ -290,6 +367,24 @@ $(APPS_DIR):
 	mkdir -p $@
 
 
+# kimg_heif.so requires KFrameworks >= 5.100 — not in jammy; needs Kubuntu Backports PPA
+/usr/bin/heif-convert:
+	$(APT) install -y libheif1 libheif-examples
+
+/etc/apt/sources.list.d/kubuntu-ppa-ubuntu-backports-jammy.list:
+	add-apt-repository -y ppa:kubuntu-ppa/backports
+	$(APT) update
+
+$(KIMG_HEIF_SO): /etc/apt/sources.list.d/kubuntu-ppa-ubuntu-backports-jammy.list
+	$(APT) install -y kimageformat-plugins
+
+$(IMAGETHUMB_DESKTOP): $(KIMG_HEIF_SO)
+	grep -q 'image/heif' $@ || sed -i 's|image/avif;|image/avif;image/heif;image/heic;|' $@
+	@echo ">>> HEIF added to KIO imagethumbnail plugin"
+
+/usr/bin/mc:
+	$(APT) install -y mc
+
 /usr/bin/npm: /usr/bin/nodejs
 	$(APT) install -y npm
 
@@ -304,6 +399,11 @@ MAKE_COMPLETION = /usr/share/bash-completion/completions/make
 make-completion:
 	@grep -q 'bash-completion/completions/make' $(BASHRC) 2>/dev/null || echo 'source $(MAKE_COMPLETION)' >> $(BASHRC)
 	@echo ">>> Make autocomplete enabled"
+
+.PHONY: clear-thumbs
+clear-thumbs:
+	rm -rf $(USER_HOME)/.cache/thumbnails/fail/
+	@echo ">>> Thumbnail fail cache cleared — reopen Dolphin to regenerate"
 
 # ----------------------------------------------------------
 # Merge incoming trees
@@ -331,6 +431,19 @@ merge:
 # ----------------------------------------------------------
 
 BMC_MAC := 9c:6b:00:47:28:34
+
+.PHONY: check-ssh
+check-ssh:
+	@echo "=== sshd service ==="
+	@systemctl is-active ssh sshd 2>/dev/null || echo "neither ssh nor sshd active"
+	@echo "=== listening on :22 ==="
+	@ss -tlnp | grep :22 || echo "nothing listening on :22"
+	@echo "=== ufw status ==="
+	@ufw status 2>/dev/null || echo "ufw not installed"
+	@echo "=== openssh-server installed? ==="
+	@dpkg -l openssh-server 2>/dev/null | tail -1
+	@echo "=== auth methods ==="
+	@grep -E 'PasswordAuthentication|PubkeyAuthentication|PermitRootLogin|AuthenticationMethods' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf 2>/dev/null | grep -v '^#'
 
 .PHONY: find-bmc
 find-bmc:
@@ -484,6 +597,21 @@ $(MODEL_DIR):
 $(HF_CLI):
 	pip install --user huggingface_hub
 	@echo ">>> huggingface-cli installed"
+
+# ----------------------------------------------------------
+# Whisper
+# ----------------------------------------------------------
+
+WHISPER_VENV  := $(USER_HOME)/.local/share/whisper-venv
+WHISPER_PIP    = VIRTUAL_ENV=$(WHISPER_VENV) $(UV) pip install
+
+$(WHISPER_VENV)/lib/python3.12/site-packages/faster_whisper: | $(WHISPER_VENV)
+	$(WHISPER_PIP) faster-whisper openai-whisper
+	@echo ">>> faster-whisper + openai-whisper installed"
+
+$(WHISPER_VENV): $(UV)
+	$(UV) venv $(WHISPER_VENV) --python 3.12
+	@echo ">>> whisper venv at $(WHISPER_VENV)"
 
 # ----------------------------------------------------------
 # Deploy / clean
