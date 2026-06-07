@@ -26,11 +26,12 @@ level-0:
 	systemctl mask packagekit
 	mkdir -p /etc/PackageKit
 	dpkg-divert --divert /etc/PackageKit/20packagekit.distrib --rename /etc/apt/apt.conf.d/20packagekit
-	$(APT) install -y apt-file git syncthing cockpit avahi-daemon arp-scan nmap nodejs npm mc libheif1 libheif-examples gwenview
+	$(APT) install -y apt-file git syncthing cockpit avahi-daemon arp-scan nmap nodejs npm mc libheif1 libheif-examples gwenview appmenu-gtk3-module appmenu-registrar
 	echo "deb http://archive.ubuntu.com/ubuntu jammy-backports main universe" > /etc/apt/sources.list.d/jammy-backports.list
 	$(APT) update
 	$(APT) install -y -t jammy-backports cockpit cockpit-files
 	apt-file update
+	$(MAKE) dynv6-update || true
 	@echo ">>> Bootstrap done. Run: sudo make"
 
 
@@ -53,10 +54,17 @@ HARDENING := \
   .sentinel/initramfs-updated
 
 # Remote access and observability
+PRINTER_NAME := hp-laserjet-mfp-2604sdw
+PRINTER_PPD  := /etc/cups/ppd/$(PRINTER_NAME).ppd
+PRINTER_URI  := ipp://192.168.178.41/ipp/print
+
 MANAGEMENT := \
   /etc/systemd/system/sockets.target.wants/cockpit.socket \
   /usr/share/cockpit/files \
   /etc/ssh/sshd_config.d/lan-password.conf \
+  $(PRINTER_PPD) \
+  /etc/systemd/system/dynv6-update.timer \
+  /etc/NetworkManager/dispatcher.d/99-dynv6 \
   .sentinel/syncthing-gui-remote
 
 # Desktop applications
@@ -68,8 +76,8 @@ HEIF_THUMB_TARGET   := $(and $(filter 0,$(HEIF_THUMB_OK)),$(IMAGETHUMB_DESKTOP))
 KIMG_HEIF_SO := /usr/lib/x86_64-linux-gnu/qt5/plugins/imageformats/kimg_heif.so
 
 PKG_APPS := \
-  /usr/bin/code \
-  /usr/bin/google-chrome \
+  /usr/share/applications/code.desktop \
+  /usr/share/applications/google-chrome.desktop \
   /usr/bin/gwenview \
   /usr/bin/heif-convert \
   /usr/bin/lmstudio \
@@ -104,6 +112,18 @@ PENDING := $(filter-out $(wildcard $(INSTALL)),$(INSTALL))
 
 level-1: $(PENDING)
 	$(APT) autoremove
+
+DESKTOP_PKG_google-chrome  := google-chrome-stable
+DESKTOP_PKG_code           := code
+DESKTOP_FLAGS_google-chrome := --use-gl=desktop
+DESKTOP_FLAGS_code          := --disable-gpu
+
+/usr/share/applications/%.desktop:
+	test -f $@ || $(APT) install -y --reinstall $(DESKTOP_PKG_$*)
+	sed -i 's|^\(Exec=[^ ]*\)|\1 $(DESKTOP_FLAGS_$*)|g' $@
+
+/usr/share/applications/google-chrome.desktop: /usr/bin/google-chrome
+/usr/share/applications/code.desktop:          /usr/bin/code
 
 ## Resolve packages by URL: explicit rule per binary
 /usr/bin/google-chrome: $(DOWNLOADS_DIR)/google-chrome-stable_current_amd64.deb
@@ -201,9 +221,14 @@ $(ST_WANTS): /usr/bin/syncthing
 		systemctl --user enable --now syncthing
 	@echo ">>> Syncthing enabled"
 
+$(PRINTER_PPD):
+	lpadmin -p $(PRINTER_NAME) -E -v $(PRINTER_URI) -m everywhere
+	lpoptions -d $(PRINTER_NAME)
+	@echo ">>> Printer $(PRINTER_NAME) added at $(PRINTER_URI)"
+
 MACHINE_IP := $(shell hostname -I | awk '{print $$1}')
 
-LAN_SUBNET := $(shell ip route | awk '/proto kernel/{print $$1}' | head -1)
+LAN_SUBNET := $(shell ip route | awk '/proto kernel/ && !/wl|ww|lo|vir|br-|docker/{print $$1; exit}')
 
 define SSH_LAN_PASSWORD_CONF
 PasswordAuthentication no
@@ -212,9 +237,12 @@ Match Address $(LAN_SUBNET),127.0.0.1
 	PasswordAuthentication yes
 endef
 
-/etc/ssh/sshd_config.d/lan-password.conf:
+/etc/ssh/sshd_config.d/:
+	mkdir -p $@
+
+/etc/ssh/sshd_config.d/lan-password.conf: | /etc/ssh/sshd_config.d/
 	$(file >$@,$(SSH_LAN_PASSWORD_CONF))
-	systemctl reload ssh
+	systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
 	@echo ">>> SSH password auth restricted to LAN ($(LAN_SUBNET))"
 
 /etc/systemd/system/sockets.target.wants/cockpit.socket: /usr/bin/cockpit
@@ -404,6 +432,71 @@ make-completion:
 clear-thumbs:
 	rm -rf $(USER_HOME)/.cache/thumbnails/fail/
 	@echo ">>> Thumbnail fail cache cleared — reopen Dolphin to regenerate"
+
+# ----------------------------------------------------------
+# dynv6 dynamic DNS
+# ----------------------------------------------------------
+
+DYNV6_ZONE       := concise.dynv6.net
+DYNV6_TOKEN_FILE := $(USER_HOME)/.config/dynv6-token
+DYNV6_API        := https://dynv6.com/api/update
+
+.PHONY: dynv6-update
+dynv6-update:
+	@test -f $(DYNV6_TOKEN_FILE) || { echo ">>> Create $(DYNV6_TOKEN_FILE) with your dynv6 HTTP token"; exit 1; }
+	@IPV4=$$(curl -fsS -4 https://api4.ipify.org) && \
+	curl -fsS "$(DYNV6_API
+	
+	
+	)?zone=$(DYNV6_ZONE)&token=$$(cat $(DYNV6_TOKEN_FILE))&ipv4=$$IPV4" && \
+	echo ">>> dynv6 updated to $$IPV4"
+
+define DYNV6_SERVICE
+[Unit]
+Description=dynv6 IP update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'IPV4=$$(curl -fsS -4 https://api4.ipify.org) && curl -fsS "$(DYNV6_API)?zone=$(DYNV6_ZONE)&token=$$(cat $(DYNV6_TOKEN_FILE))&ipv4=$$IPV4"'
+endef
+
+define DYNV6_TIMER
+[Unit]
+Description=dynv6 IP update every 5 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
+endef
+
+define DYNV6_NM_DISPATCHER
+#!/bin/sh
+# Fire dynv6 update immediately when any interface comes up
+[ "$$2" = "up" ] || exit 0
+TOKEN_FILE=$(DYNV6_TOKEN_FILE)
+[ -f "$$TOKEN_FILE" ] || exit 0
+IPV4=$$(curl -fsS -4 https://api4.ipify.org) && \
+  curl -fsS "$(DYNV6_API)?zone=$(DYNV6_ZONE)&token=$$(cat $$TOKEN_FILE)&ipv4=$$IPV4"
+endef
+
+/etc/NetworkManager/dispatcher.d/99-dynv6:
+	$(file >$@,$(DYNV6_NM_DISPATCHER))
+	chmod +x $@
+	@echo ">>> dynv6 NM dispatcher installed"
+
+/etc/systemd/system/dynv6-update.service:
+	$(file >$@,$(DYNV6_SERVICE))
+	@echo ">>> dynv6 service written"
+
+/etc/systemd/system/dynv6-update.timer: /etc/systemd/system/dynv6-update.service
+	$(file >$@,$(DYNV6_TIMER))
+	systemctl enable --now dynv6-update.timer
+	@echo ">>> dynv6 timer enabled (every 5 min)"
 
 # ----------------------------------------------------------
 # Merge incoming trees
@@ -602,12 +695,17 @@ $(HF_CLI):
 # Whisper
 # ----------------------------------------------------------
 
+UV            := $(USER_HOME)/.local/bin/uv
 WHISPER_VENV  := $(USER_HOME)/.local/share/whisper-venv
 WHISPER_PIP    = VIRTUAL_ENV=$(WHISPER_VENV) $(UV) pip install
 
 $(WHISPER_VENV)/lib/python3.12/site-packages/faster_whisper: | $(WHISPER_VENV)
 	$(WHISPER_PIP) faster-whisper openai-whisper
 	@echo ">>> faster-whisper + openai-whisper installed"
+
+$(UV):
+	curl -LsSf https://astral.sh/uv/install.sh | UV_INSTALL_DIR=$(dir $(UV)) sh
+	@echo ">>> uv installed to $(UV)"
 
 $(WHISPER_VENV): $(UV)
 	$(UV) venv $(WHISPER_VENV) --python 3.12
@@ -641,6 +739,7 @@ clean-cuda:
 
 .PHONY: clean
 clean: clean-infer clean-cuda clean-demo
+	rm -f /usr/share/applications/google-chrome.desktop /usr/share/applications/code.desktop
 
 # ----------------------------------------------------------
 # TurboQuant Fit Demo — bench-bert  bench-tq  demo-fit
@@ -651,7 +750,6 @@ DEMO_DIR      := $(CURDIR)/turboquant-demo
 DEMO_SENTINEL := $(DEMO_DIR)/.sentinel
 $(shell mkdir -p $(DEMO_SENTINEL))
 TURBO_DIR     ?=
-UV            := $(USER_HOME)/.local/bin/uv
 VENV          := $(DEMO_DIR)/.venv
 VENV_PY       := $(VENV)/bin/python3
 VENV_PIP       = VIRTUAL_ENV=$(VENV) $(UV) pip install
