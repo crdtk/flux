@@ -227,6 +227,8 @@ endif
 # ----------------------------------------------------------
 
 /etc/ddclient.conf: $(PROJECTS)/secrets/ddclient.conf /usr/bin/ddclient
+	systemctl disable --now dynv6-update.timer dynv6-update.service 2>/dev/null || true
+	rm -f /etc/systemd/system/dynv6-update.service /etc/systemd/system/dynv6-update.timer
 	ln -sf $< $@
 	systemctl enable --now ddclient
 	@echo ">>> ddclient configured and enabled"
