@@ -13,7 +13,7 @@ all: $(if $(filter 0,$(shell id -u)),$(ROOT_TARGET),setup)
 # Package install (sudo make)
 # ----------------------------------------------------------
 
-APT := apt-get -o DPkg::Lock::Timeout=-1
+APT := DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=-1
 
 .PHONY: level-0 ## Foundational packages required for the rest of the packages install
 level-0:
