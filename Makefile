@@ -232,7 +232,7 @@ endif
 	@echo ">>> ddclient configured and enabled"
 
 $(PROJECTS)/secrets/ddclient.conf: | $(PROJECTS)
-	cd $(PROJECTS) && git clone https://github.com/crdtk/secrets
+	cd $(PROJECTS) && git clone git@github.com:crdtk/secrets.git
 
 $(PROJECTS):
 	mkdir -p $@
