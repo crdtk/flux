@@ -53,6 +53,14 @@
 #     Explicit recipes shadow pattern rules — remove from LAZILY_RESOLVED.
 #     Targets always present when INSTALL runs never build — remove from groups.
 #
+# 16. Order-only prerequisites make $< empty.
+#     With |, reference the dependency path explicitly in the recipe.
+#     $< is only set by normal prerequisites, not order-only ones.
+#
+# 17. Multi-line file content lives in define…endef.
+#     Write configs and unit files as named define blocks.
+#     Emit with $(file >$@,$(VAR)) — no heredocs, no quoting issues.
+#
 # ==========================================================
 
 MAKEFLAGS += --no-builtin-rules
