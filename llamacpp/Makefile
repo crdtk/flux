@@ -7,8 +7,7 @@ MODEL_DIR     ?= $(USER_HOME)/models
 NVCC          ?= /usr/local/cuda/bin/nvcc
 SYS_SM        ?= $(shell nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d '.' | grep -oE '^[0-9]+')
 
-SENTINEL := $(CURDIR)/.sentinel
-$(shell mkdir -p $(SENTINEL))
+CUDA_MATH_PATCHED := $(shell grep -qE 'rsqrtf?\(.*\) noexcept' $(CUDA_MATH_H) 2>/dev/null && echo 1)
 
 # ----------------------------------------------------------
 # CUDA rsqrt patch — fixes glibc 2.41 conflict in CUDA 13.1 headers
@@ -34,12 +33,12 @@ with open(path, 'w') as f:
     f.writelines(lines)
 endef
 
-$(SENTINEL)/cuda-rsqrt-patched:
+.PHONY: patch-cuda-math
+patch-cuda-math:
 	@test -f $(CUDA_MATH_H) || { echo ">>> CUDA not installed — run: sudo make from project root"; exit 1; }
 	sed -i -E '/\brsqrtf?\b/{ /__device__/! { /noexcept/! s/\);$$/) noexcept;/ } }' $(CUDA_MATH_H)
 	$(file >/tmp/cuda_hpp_patch.py,$(CUDA_HPP_PATCH_PY))
 	python3 /tmp/cuda_hpp_patch.py $(CUDA_MATH_HPP)
-	touch $@
 	@echo ">>> CUDA math_functions patched for glibc 2.41"
 
 # ----------------------------------------------------------
@@ -56,7 +55,7 @@ CUDA_ROOT    := $(patsubst %/bin/nvcc,%,$(NVCC))
 CUDA_HOST_CC  := $(firstword $(wildcard /usr/bin/g++-14 /usr/bin/g++-13 /usr/bin/g++-12))
 CUDA_HOST_FLAG = $(if $(CUDA_HOST_CC),-DCMAKE_CUDA_HOST_COMPILER=$(CUDA_HOST_CC),)
 
-$(LLAMA_BIN): $(LLAMA_SRC) $(SENTINEL)/cuda-rsqrt-patched | $(LLAMA_BINS)
+$(LLAMA_BIN): $(LLAMA_SRC) $(if $(CUDA_MATH_PATCHED),,patch-cuda-math) | $(LLAMA_BINS)
 	@test -x $(NVCC) || { echo ">>> CUDA not installed — run: sudo make from project root"; exit 1; }
 	cmake -B $(LLAMA_SRC)/build -S $(LLAMA_SRC) \
 		-DGGML_CUDA=ON \
@@ -135,5 +134,4 @@ infer-server: $(LLAMA_BIN) $(MODEL_META)
 clean:
 	rm -f $(LLAMA_BINS)/llama-bench $(LLAMA_BINS)/llama-server $(LLAMA_BINS)/llama-cli
 	rm -rf $(LLAMA_SRC)
-	rm -f $(SENTINEL)/cuda-rsqrt-patched
 	@echo ">>> llama.cpp build cleaned"
