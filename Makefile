@@ -1,13 +1,44 @@
 # ==========================================================
 # Ubuntu Setup
 # ==========================================================
+#
+# DESIGN PRINCIPLES — follow these when extending this file:
+#
+# 1. Intention-revealing names
+#    Variable names declare WHY items are grouped, not just what they are.
+#    UNTRACKED_PKGS  = no Make file target; install state invisible to Make.
+#    LAZILY_RESOLVED = has a /usr/bin file target; resolved on demand by the
+#                      apt-file pattern rule.
+#    CUDA_SYMLINK    = real symlink path, not a sentinel file.
+#
+# 2. Eager-lazy duality with idempotent overlap
+#    Packages in LAZILY_RESOLVED install two ways: bulk at bootstrap (one
+#    apt call, fast on fresh systems) and per file-target on demand (correct
+#    on existing systems). apt idempotency makes the overlap safe — the lazy
+#    path is the authority; the eager path is an optimisation.
+#    Rule: /usr/bin file target in INSTALL → also add to LAZILY_RESOLVED.
+#
+# 3. Append-safe extensibility
+#    The system grows by addition, not modification. Append a file target to
+#    any group list (HARDENING / MANAGEMENT / PKG_APPS / COMPUTE / STORAGE)
+#    and it works on both fresh and existing systems with no bootstrap changes.
+#    Rule: new apt package with /usr/bin target → append to group list and
+#    LAZILY_RESOLVED. Package with no /usr/bin target → UNTRACKED_PKGS only.
+#
+# 4. Hardware-gated groups
+#    Expensive or hardware-specific target groups are conditionally included
+#    in INSTALL using parse-time shell checks on real hardware properties.
+#    COMPUTE_CAPABLE gates on GPU SM ≥ 75 (Turing+, Tensor Cores present).
+#    Rule: use a named capability variable (COMPUTE_CAPABLE, not a magic
+#    number inline) so the threshold and its reason are self-documenting.
+#
+# ==========================================================
 
 MAKEFLAGS += --no-builtin-rules
 .SUFFIXES:
 
 .PHONY: all
-ROOT_TARGET := $(if $(wildcard /usr/bin/apt-file),level-1,level-0)
-all: $(if $(filter 0,$(shell id -u)),$(ROOT_TARGET),setup)
+all: $(if $(filter 0,$(shell id -u)),system,user)
 
 # ----------------------------------------------------------
 # Package install (sudo make)
@@ -15,25 +46,7 @@ all: $(if $(filter 0,$(shell id -u)),$(ROOT_TARGET),setup)
 
 APT := DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=-1
 
-.PHONY: level-0 ## Foundational packages required for the rest of the packages install
-level-0:
-	systemctl disable --now pop-shop backuppc urbackup-client urbackupclientbackend apache2 postfix xrdp xrdp-sesman x2goserver rpcbind touchegg webmin ollama nmbd smbd samba pop-upgrade thermald 2>/dev/null || true
-	apt purge -y pop-shop backuppc urbackup-client apache2 postfix xrdp x2goserver rpcbind touchegg webmin samba nmbd smbd pop-upgrade thermald cockpit-packagekit 2>/dev/null || true
-	snap remove --purge ollama 2>/dev/null || true
-	rm -f /usr/local/bin/ollama /etc/systemd/system/ollama.service
-	systemctl daemon-reload
-	systemctl stop packagekit 2>/dev/null || true
-	systemctl mask packagekit
-	mkdir -p /etc/PackageKit
-	dpkg-divert --divert /etc/PackageKit/20packagekit.distrib --rename /etc/apt/apt.conf.d/20packagekit
-	echo "deb http://archive.ubuntu.com/ubuntu jammy-backports main universe" > /etc/apt/sources.list.d/jammy-backports.list
-	$(APT) update
-	$(APT) install -y apt-file git syncthing avahi-daemon arp-scan nmap nodejs npm mc libheif1 libheif-examples gwenview appmenu-gtk3-module appmenu-registrar ddclient cockpit/jammy-backports cockpit-files/jammy-backports
-	apt-file update
-	@echo ">>> Bootstrap done. Run: sudo make"
-
-
-.PHONY: level-1 ## Installs INSTALL targets not yet present on this machine
+.PHONY: system ## Installs INSTALL targets not yet present on this machine
 
 USER_HOME     := $(shell getent passwd $${SUDO_USER:-$$(whoami)} | cut -d: -f6)
 DOWNLOADS_DIR := $(USER_HOME)/Downloads
@@ -48,13 +61,15 @@ HAS_BMC      := $(shell dmidecode -t 38 2>/dev/null | grep -c 'IPMI Device Infor
 GRUB_TIMEOUT := 3
 
 HARDENING := \
+  /etc/systemd/system/packagekit.service \
   /etc/systemd/system/suspend.target \
   /etc/modprobe.d/blacklist-nouveau.conf \
+  /etc/modprobe.d/blacklist-parport.conf \
   /etc/modprobe.d/nvidia-power.conf \
   /etc/systemd/system/openipmi.service \
+  /etc/apt/preferences.d/no-snapd \
   .sentinel/pam-sss-fixed \
-  .sentinel/grub-timeout-set \
-  .sentinel/initramfs-updated
+  .sentinel/grub-timeout-set
 
 # ----------------------------------------------------------
 # MANAGEMENT — remote access and observability
@@ -80,10 +95,11 @@ ST_WANTS     := $(USER_HOME)/.config/systemd/user/default.target.wants/syncthing
 MANAGEMENT := \
   /etc/ddclient.conf \
   /etc/systemd/system/sockets.target.wants/cockpit.socket \
-  /usr/share/cockpit/files \
   /etc/ssh/sshd_config.d/lan-password.conf \
+  /etc/NetworkManager/conf.d/captive-portal.conf \
   $(PRINTER_PPD) \
-  .sentinel/syncthing-gui-remote
+  .sentinel/syncthing-gui-remote \
+  /usr/bin/rclone
 
 # ----------------------------------------------------------
 # PKG_APPS — desktop applications
@@ -116,15 +132,12 @@ PKG_APPS := \
 
 UBUNTU_VER            := $(shell lsb_release -rs 2>/dev/null | tr -d '.')
 SYS_SM                := $(shell nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d '.' | grep -oE '^[0-9]+')
-CUDA_PKG              := $(if $(shell [ -n "$(SYS_SM)" ] && [ "$(SYS_SM)" -lt 75 ] && echo 1),cuda-toolkit-12-6,cuda-toolkit)
-CUDA_VER              := $(shell echo $(CUDA_PKG) | grep -oE '[0-9]+-[0-9]+$$' | tr '-' '.')
-NVCC                  := $(if $(CUDA_VER),/usr/local/cuda-$(CUDA_VER)/bin/nvcc,/usr/local/cuda/bin/nvcc)
+CUDA_PKG              ?= cuda-toolkit
+NVCC                  := /usr/local/cuda/bin/nvcc
 CUDA_LIST             := /etc/apt/sources.list.d/cuda-ubuntu$(UBUNTU_VER)-x86_64.list
-CUDA_SYMLINK_SENTINEL := $(if $(CUDA_VER),/usr/local/cuda,)
+CUDA_SYMLINK := /usr/local/cuda
 CUDA_REPO              = https://developer.download.nvidia.com/compute/cuda/repos/ubuntu$(UBUNTU_VER)/x86_64
 CUDA_KEYRING_DEB      := $(DOWNLOADS_DIR)/cuda-keyring_1.1-1_all.deb
-CUDA_MATH_H           := /usr/local/cuda/targets/x86_64-linux/include/crt/math_functions.h
-CUDA_MATH_HPP         := /usr/local/cuda/targets/x86_64-linux/include/crt/math_functions.hpp
 CURRENT_UID           := $(shell id -u)
 UV                    := $(USER_HOME)/.local/bin/uv
 WHISPER_VENV          := $(USER_HOME)/.local/share/whisper-venv
@@ -135,23 +148,36 @@ COMPUTE := \
   /usr/bin/nvidia-smi \
   $(CUDA_LIST) \
   $(NVCC) \
-  $(CUDA_SYMLINK_SENTINEL) \
+  $(CUDA_SYMLINK) \
   /usr/bin/cmake \
   /usr/bin/g++-14 \
-  .sentinel/cuda-rsqrt-patched \
   $(WHISPER_TARGET)
 
 # ----------------------------------------------------------
 
-INSTALL := $(HARDENING) $(MANAGEMENT) $(PKG_APPS) $(COMPUTE)
+COMPUTE_CAPABLE := $(shell [ -n "$(SYS_SM)" ] && [ "$(SYS_SM)" -ge 75 ] && echo 1)
+SN8100_PRESENT  := $(shell test -e /dev/disk/by-label/backup && echo 1)
+SN8100_DEV      := $(shell lsblk -dno NAME,MODEL 2>/dev/null | awk '/SN8100/{print $$1; exit}')
+
+INSTALL := $(HARDENING) $(MANAGEMENT) $(PKG_APPS) $(if $(COMPUTE_CAPABLE),$(COMPUTE),) $(if $(SN8100_PRESENT),$(STORAGE),)
 PENDING := $(filter-out $(wildcard $(INSTALL)),$(INSTALL))
 
-level-1: $(PENDING)
+system: $(PENDING)
+	update-initramfs -u
 	$(APT) autoremove
 
 # ----------------------------------------------------------
 # Infrastructure — pattern rules, downloads, sentinels
 # ----------------------------------------------------------
+
+UNTRACKED_PKGS  := git avahi-daemon arp-scan nmap appmenu-gtk3-module appmenu-registrar
+LAZILY_RESOLVED := syncthing npm mc libheif-examples gwenview ddclient cockpit cockpit-files cmake g++-14 rclone
+
+/usr/bin/apt-file: | /etc/systemd/system/packagekit.service
+	$(APT) update
+	$(APT) install -y apt-file $(UNTRACKED_PKGS) $(LAZILY_RESOLVED)
+	apt-file update
+	@echo ">>> apt-file ready"
 
 ## Resolve packages by Custom Repository URL
 /usr/bin/%: /etc/apt/sources.list.d/%.list
@@ -159,7 +185,7 @@ level-1: $(PENDING)
 	$(APT) install -y $*
 
 ## Resolve packages using apt-file global search
-/usr/bin/%:
+/usr/bin/%: | /usr/bin/apt-file
 	$(APT) install -y $$(apt-file search $@ 2>/dev/null | awk -F': ' '{print $$1}' | head -1)
 
 $(DOWNLOADS_DIR)/%: | $(DOWNLOADS_DIR)
@@ -175,6 +201,26 @@ $(DOWNLOADS_DIR):
 # HARDENING recipes
 # ----------------------------------------------------------
 
+/etc/systemd/system/packagekit.service:
+	rm -f /etc/apt/sources.list.d/jammy-backports.list
+	systemctl disable --now ollama touchegg 2>/dev/null || true
+	$(APT) purge -y ollama touchegg cockpit-packagekit 2>/dev/null || true
+	rm -f /usr/local/bin/ollama /etc/systemd/system/ollama.service
+	systemctl stop packagekit 2>/dev/null || true
+	systemctl mask packagekit
+	mkdir -p /etc/PackageKit
+	dpkg-divert --divert /etc/PackageKit/20packagekit.distrib --rename /etc/apt/apt.conf.d/20packagekit 2>/dev/null || true
+	systemctl daemon-reload
+	@echo ">>> debloat complete"
+
+/etc/apt/preferences.d/no-snapd:
+	mkdir -p $(dir $@)
+	snap list --all 2>/dev/null | awk 'NR>1{print $$1}' | xargs -r snap remove --purge 2>/dev/null || true
+	$(APT) purge -y snapd 2>/dev/null || true
+	rm -rf /snap /var/snap /var/lib/snapd /var/cache/snapd ~/snap
+	printf 'Package: snapd\nPin: release *\nPin-Priority: -1\n' > $@
+	@echo ">>> snap purged and pinned out"
+
 /etc/systemd/system/suspend.target:
 	systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
 	@echo ">>> Suspend disabled"
@@ -187,6 +233,18 @@ endef
 /etc/modprobe.d/blacklist-nouveau.conf:
 	$(file >$@,$(BLACKLIST_NOUVEAU))
 	@echo ">>> nouveau blacklisted"
+
+define BLACKLIST_PARPORT
+# lp/parport crash kernel 7.0.0-22 with NULL deref in parport_register_dev_model
+blacklist lp
+blacklist ppdev
+blacklist parport_pc
+blacklist parport
+endef
+
+/etc/modprobe.d/blacklist-parport.conf:
+	$(file >$@,$(BLACKLIST_PARPORT))
+	@echo ">>> parport/lp blacklisted (kernel 7.0.0-22 NULL deref bug)"
 
 define NVIDIA_POWER_CONF
 options nvidia NVreg_PreserveVideoMemoryAllocations=1
@@ -217,10 +275,6 @@ endif
 	@test -f /etc/default/grub && sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=$(GRUB_TIMEOUT)/' /etc/default/grub && update-grub && echo ">>> GRUB timeout = $(GRUB_TIMEOUT)" || echo ">>> /etc/default/grub not found, skipping"
 	touch $@
 
-.sentinel/initramfs-updated: /etc/modprobe.d/blacklist-nouveau.conf /etc/modprobe.d/nvidia-power.conf | .sentinel
-	update-initramfs -u
-	touch $@
-	@echo ">>> initramfs updated"
 
 # ----------------------------------------------------------
 # MANAGEMENT recipes
@@ -239,17 +293,23 @@ $(PROJECTS)/secrets/ddclient.conf: | $(PROJECTS)
 $(PROJECTS):
 	mkdir -p $@
 
+define NM_CAPTIVE_PORTAL_CONF
+[connectivity]
+uri=http://nmcheck.gnome.org/check_network_status.txt
+response=NetworkManager is online
+interval=60
+endef
+
+/etc/NetworkManager/conf.d/captive-portal.conf:
+	mkdir -p $(dir $@)
+	$(file >$@,$(NM_CAPTIVE_PORTAL_CONF))
+	systemctl reload NetworkManager
+	@echo ">>> Captive portal detection enabled"
+
 /etc/systemd/system/sockets.target.wants/cockpit.socket: /usr/bin/cockpit
 	systemctl enable --now cockpit.socket
 	@echo ">>> Cockpit: https://$(MACHINE_IP):9090"
 
-# cockpit-files requires cockpit >= 318; jammy ships 264 — upgrade via backports
-/usr/share/cockpit/files: /etc/apt/sources.list.d/jammy-backports.list
-	$(APT) install -y -t jammy-backports cockpit cockpit-files
-
-/etc/apt/sources.list.d/jammy-backports.list:
-	echo "deb http://archive.ubuntu.com/ubuntu jammy-backports main universe" > $@
-	$(APT) update
 
 define SSH_LAN_PASSWORD_CONF
 PasswordAuthentication no
@@ -313,12 +373,7 @@ $(ST_WANTS): /usr/bin/syncthing
 	$(APT) install -y $<
 	sed -i 's|Exec=/opt/LM-Studio/lm-studio|Exec=/opt/LM-Studio/lm-studio --use-gl=desktop|' /usr/share/applications/lm-studio.desktop
 
-# kimg_heif.so requires KFrameworks >= 5.100 — not in jammy; needs Kubuntu Backports PPA
-/etc/apt/sources.list.d/kubuntu-ppa-ubuntu-backports-jammy.list:
-	add-apt-repository -y ppa:kubuntu-ppa/backports
-	$(APT) update
-
-$(KIMG_HEIF_SO): /etc/apt/sources.list.d/kubuntu-ppa-ubuntu-backports-jammy.list
+$(KIMG_HEIF_SO):
 	$(APT) install -y kimageformat-plugins
 
 $(IMAGETHUMB_DESKTOP): $(KIMG_HEIF_SO)
@@ -346,33 +401,8 @@ $(NVCC): | $(CUDA_LIST)
 
 /usr/local/cuda:
 	@test $(CURRENT_UID) -eq 0 || { echo ">>> CUDA symlink requires root. Run: sudo make"; exit 1; }
-	ln -sfn /usr/local/cuda-$(CUDA_VER) $@
+	ln -sfn $$(ls -d /usr/local/cuda-* 2>/dev/null | sort -V | tail -1) $@
 
-define CUDA_HPP_PATCH_PY
-import sys
-path = sys.argv[1]
-targets = [
-    '__MATH_FUNCTIONS_DECL__ float rsqrt(const float a)',
-    '__func__(double rsqrt(const double a))',
-    '__func__(float rsqrtf(const float a))',
-]
-with open(path) as f:
-    lines = f.readlines()
-for i, line in enumerate(lines):
-    if line.rstrip('\n') in targets:
-        lines[i] = line.rstrip('\n') + ' noexcept\n'
-with open(path, 'w') as f:
-    f.writelines(lines)
-endef
-
-# CUDA 13.1 rsqrt/rsqrtf host declarations lack noexcept, conflicting with glibc 2.41
-.sentinel/cuda-rsqrt-patched: | .sentinel
-	@test -f $(CUDA_MATH_H) || { echo ">>> CUDA not installed. Run: sudo make"; exit 1; }
-	sed -i -E '/\brsqrtf?\b/{ /__device__/! { /noexcept/! s/\);$$/) noexcept;/ } }' $(CUDA_MATH_H)
-	$(file >/tmp/cuda_hpp_patch.py,$(CUDA_HPP_PATCH_PY))
-	python3 /tmp/cuda_hpp_patch.py $(CUDA_MATH_HPP)
-	touch $@
-	@echo ">>> CUDA math_functions patched for glibc 2.41"
 
 $(WHISPER_TARGET): | $(WHISPER_VENV)
 	$(WHISPER_PIP) faster-whisper openai-whisper
@@ -390,7 +420,7 @@ $(WHISPER_VENV): $(UV)
 # User setup (make, no sudo)
 # ----------------------------------------------------------
 
-.PHONY: setup
+.PHONY: user
 
 DIGIKAM_VERSION := 9.0.0
 DIGIKAM_URL     := https://download.kde.org/stable/digikam/$(DIGIKAM_VERSION)/digiKam-$(DIGIKAM_VERSION)-Qt6-x86-64.appimage
@@ -405,9 +435,9 @@ SSH_KEY    := $(USER_HOME)/.ssh/id_ed25519
 
 DOLPHIN_PREVIEW_OK     := $(shell grep -c '^Show Preview=true' $(USER_HOME)/.config/kdeglobals 2>/dev/null)
 DOLPHIN_PREVIEW_TARGET := $(and $(filter 0,$(DOLPHIN_PREVIEW_OK)),.sentinel/dolphin-show-preview)
-KBUILDSYCOCA           := $(or $(wildcard /usr/bin/kbuildsycoca6),$(wildcard /usr/bin/kbuildsycoca5))
+KBUILDSYCOCA           := /usr/bin/kbuildsycoca6
 
-setup: $(APPS) $(CLAUDE_BIN) $(USER_HOME)/.ssh/authorized_keys $(DOLPHIN_PREVIEW_TARGET) make-completion
+user: $(APPS) $(CLAUDE_BIN) $(USER_HOME)/.ssh/authorized_keys $(DOLPHIN_PREVIEW_TARGET) make-completion $(ST_WANTS)
 	$(KBUILDSYCOCA)
 
 $(USER_HOME)/.ssh/authorized_keys: $(SSH_KEY)
@@ -558,12 +588,23 @@ TimeoutIdleSec=0
 WantedBy=multi-user.target
 endef
 
-.PHONY: backup-mount
-backup-mount:
+STORAGE := \
+  /etc/systemd/system/mnt-backup.mount \
+  /etc/systemd/system/mnt-backup.automount \
+  /etc/systemd/system/multi-user.target.wants/mnt-backup.automount
+
+.PHONY: storage backup-mount
+storage backup-mount: $(STORAGE)
+
+/etc/systemd/system/mnt-backup.mount:
 	sed -i '\|/mnt/backup|d' /etc/fstab 2>/dev/null || true
-	$(file >/etc/systemd/system/mnt-backup.mount,$(BACKUP_MOUNT_UNIT))
-	$(file >/etc/systemd/system/mnt-backup.automount,$(BACKUP_AUTOMOUNT_UNIT))
+	$(file >$@,$(BACKUP_MOUNT_UNIT))
 	systemctl daemon-reload
+
+/etc/systemd/system/mnt-backup.automount: /etc/systemd/system/mnt-backup.mount
+	$(file >$@,$(BACKUP_AUTOMOUNT_UNIT))
+
+/etc/systemd/system/multi-user.target.wants/mnt-backup.automount: /etc/systemd/system/mnt-backup.automount
 	systemctl enable --now mnt-backup.automount
 	systemctl start mnt-backup.mount
 	chmod 1777 /mnt/backup
@@ -571,86 +612,10 @@ backup-mount:
 
 .PHONY: eject
 eject:
-	@DEV=$$(lsblk -dno NAME,MODEL | awk '/SN8100/{print $$1; exit}'); \
-	[ -n "$$DEV" ] || { echo "SN8100 not found"; exit 1; }; \
-	echo 1 > /sys/block/$$DEV/device/remove; \
-	echo ">>> Ejected $$DEV"
+	@[ -n "$(SN8100_DEV)" ] || { echo "SN8100 not found"; exit 1; }
+	echo 1 > /sys/block/$(SN8100_DEV)/device/remove
+	@echo ">>> Ejected $(SN8100_DEV)"
 
-# ----------------------------------------------------------
-# Inference — llama.cpp. make infer-server builds everything on first run.
-# ----------------------------------------------------------
-
-MODEL_DIR  ?= $(USER_HOME)/models
-MODEL_FILE := Qwen3-Coder-30B-A3B-Instruct-480B-Distill-V2-Fp32.i1-Q4_K_M.gguf
-MODEL_PATH := $(MODEL_DIR)/$(MODEL_FILE)
-MODEL_META := $(MODEL_DIR)/.cache/huggingface/download/$(MODEL_FILE).metadata
-.PRECIOUS: $(MODEL_PATH) $(MODEL_META)
-
-SYS_THREADS   := $(shell nproc)
-SYS_VRAM      := $(shell nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | awk '{sum+=$$1}END{print sum+0}')
-SYS_MODEL_MIB := $(shell test -f $(MODEL_META) && du -m $(MODEL_PATH) | cut -f1 || echo 0)
-SYS_AVAIL     := $(shell echo $$(( $(SYS_VRAM) > $(SYS_MODEL_MIB) ? $(SYS_VRAM) - $(SYS_MODEL_MIB) : 0 )))
-SYS_CTX       := $(shell echo $$(( $(SYS_AVAIL) * 16 > 131072 ? 131072 : $(SYS_AVAIL) * 16 )))
-
-N_GPU_LAYERS ?= 99
-N_CPU_MOE    := $(if $(filter-out 0,$(SYS_AVAIL)),0,48)
-THREADS      ?= $(SYS_THREADS)
-CTX_SIZE     ?= $(or $(filter-out 0,$(SYS_CTX)),16384)
-MOE_FLAG      = $(if $(filter-out 0,$(N_CPU_MOE)),--n-cpu-moe $(N_CPU_MOE),)
-INFER_FLAGS   = -ngl $(N_GPU_LAYERS) $(MOE_FLAG) --no-mmap --mlock --cache-type-k q4_0 --cache-type-v q4_0 --ctx-size $(CTX_SIZE) --threads $(THREADS) --flash-attn on
-LLAMA_BINS    = $(USER_HOME)/.local/bin
-LLAMA_BIN     = $(LLAMA_BINS)/llama-bench
-
-.PHONY: infer-server
-infer-server: $(LLAMA_BIN) $(MODEL_META)
-	@echo ">>> Serving on http://0.0.0.0:8080 — GPU_LAYERS=$(N_GPU_LAYERS) CTX=$(CTX_SIZE)"
-	llama-server -m $(MODEL_PATH) $(INFER_FLAGS) --host 0.0.0.0 --port 8080
-
-LLAMA_TAG      = b9222
-LLAMA_SRC      = $(DOWNLOADS_DIR)/llama.cpp-$(LLAMA_TAG)
-CUDA_ROOT     := $(patsubst %/bin/nvcc,%,$(NVCC))
-# CUDA 13.x does not support GCC 15 (Ubuntu 26.04 default); use g++-14 as host compiler
-CUDA_HOST_CC   := $(firstword $(wildcard /usr/bin/g++-14 /usr/bin/g++-13 /usr/bin/g++-12))
-CUDA_HOST_FLAG  = $(if $(CUDA_HOST_CC),-DCMAKE_CUDA_HOST_COMPILER=$(CUDA_HOST_CC),)
-
-$(LLAMA_BIN): $(LLAMA_SRC) /usr/bin/cmake /usr/bin/g++-14 .sentinel/cuda-rsqrt-patched | $(LLAMA_BINS)
-	@test -x $(NVCC) || { echo ">>> CUDA not installed. Run: sudo make"; exit 1; }
-	cmake -B $(LLAMA_SRC)/build -S $(LLAMA_SRC) \
-		-DGGML_CUDA=ON \
-		-DCMAKE_CUDA_COMPILER=$(NVCC) \
-		-DCUDA_TOOLKIT_ROOT_DIR=$(CUDA_ROOT) \
-		-DCUDAToolkit_ROOT=$(CUDA_ROOT) \
-		-DCMAKE_EXE_LINKER_FLAGS="-L$(CUDA_ROOT)/lib64 -Wl,-rpath,$(CUDA_ROOT)/lib64" \
-		-DCMAKE_CUDA_ARCHITECTURES=$(SYS_SM) \
-		-DCMAKE_BUILD_TYPE=Release \
-		-DBUILD_SHARED_LIBS=OFF \
-		$(CUDA_HOST_FLAG)
-	cmake --build $(LLAMA_SRC)/build -j$(SYS_THREADS)
-	cp $(LLAMA_SRC)/build/bin/llama-bench $(LLAMA_SRC)/build/bin/llama-server $(LLAMA_SRC)/build/bin/llama-cli $(LLAMA_BINS)/
-	@echo ">>> llama.cpp $(LLAMA_TAG) built with CUDA"
-
-$(LLAMA_SRC): $(LLAMA_SRC).tar.gz
-	tar -xzf $< -C $(DOWNLOADS_DIR)
-
-$(LLAMA_SRC).tar.gz: | $(DOWNLOADS_DIR)
-	curl -fsSL https://github.com/ggml-org/llama.cpp/archive/refs/tags/$(LLAMA_TAG).tar.gz -o $@
-
-$(LLAMA_BINS):
-	mkdir -p $@
-
-MODEL_HF = mradermacher/Qwen3-Coder-30B-A3B-Instruct-480B-Distill-V2-Fp32-i1-GGUF
-HF_CLI   = $(LLAMA_BINS)/hf
-
-$(MODEL_META): | $(MODEL_DIR) $(HF_CLI)
-	$(HF_CLI) download $(MODEL_HF) $(MODEL_FILE) --local-dir $(MODEL_DIR)
-	@echo ">>> Model ready: $(MODEL_PATH)"
-
-$(MODEL_DIR):
-	mkdir -p $@
-
-$(HF_CLI):
-	pip install --user huggingface_hub
-	@echo ">>> huggingface-cli installed"
 
 # ----------------------------------------------------------
 # Deploy / clean
@@ -662,146 +627,21 @@ deploy:
 	@rsync -av Makefile crucible.local:~/Code/hardware/
 	@ssh -tt crucible.local 'cd ~/Code/hardware && exec $$SHELL'
 
+
 .PHONY: audit-services
 audit-services:
 	@systemctl list-units --type=service --state=running --no-pager | grep -vE 'dbus|getty|systemd|udev|network|bluetooth|audio|cups|avahi|ssh|cron|gdm|display|polkit|rtkit|login|accounts|power|udisk|mount|fstrim|kernel|irq|cpu|nvidia|snapd'
-
-## Wipe llama.cpp build — hardware is re-assessed at parse time on next run
-.PHONY: clean-infer
-clean-infer:
-	rm -f $(LLAMA_BINS)/llama-bench $(LLAMA_BINS)/llama-server $(LLAMA_BINS)/llama-cli
-	rm -rf $(LLAMA_SRC)
-	rm -f .sentinel/cuda-rsqrt-patched 2>/dev/null || true
 
 ## Wipe CUDA repo setup — forces keyring re-download and toolkit reinstall on next run
 .PHONY: clean-cuda
 clean-cuda:
 	rm -f $(CUDA_KEYRING_DEB) /etc/apt/sources.list.d/cuda-ubuntu*-x86_64.list
 
+.PHONY: clean-debloat
+clean-debloat:
+	rm -f /etc/apt/preferences.d/no-snapd
+	rm -f /etc/systemd/system/packagekit.service
+
 .PHONY: clean
-clean: clean-infer clean-cuda clean-demo
+clean: clean-cuda clean-debloat
 	rm -f /usr/share/applications/google-chrome.desktop /usr/share/applications/code.desktop
-
-# ----------------------------------------------------------
-# TurboQuant Fit Demo — bench-bert  bench-tq  demo-fit
-# Source: turboquant-demo/  (proper Python package, not generated)
-# ----------------------------------------------------------
-
-DEMO_DIR      := $(CURDIR)/turboquant-demo
-DEMO_SENTINEL := $(DEMO_DIR)/.sentinel
-$(shell mkdir -p $(DEMO_SENTINEL))
-TURBO_DIR     ?=
-VENV          := $(DEMO_DIR)/.venv
-VENV_PY       := $(VENV)/bin/python3
-VENV_PIP       = VIRTUAL_ENV=$(VENV) $(UV) pip install
-
-DEMO_MODEL_HF  ?= casperhansen/deepseek-r1-distill-qwen-7b-awq
-DEMO_MODEL_DIR := $(MODEL_DIR)/$(notdir $(DEMO_MODEL_HF))
-
-# Locust defaults — override on the command line, e.g. LOCUST_USERS=8 make bench-locust
-LOCUST_USERS   ?= 4
-LOCUST_RATE    ?= 1
-LOCUST_TIME    ?= 60s
-LOCUST_CSV     ?= $(DEMO_DIR)/locust_results
-
-.PHONY: bench-bert bench-tq bench-pipeline bench-spark demo-servers demo-fit demo-model bench-locust locust-ui clean-demo
-
-# ---- Stage 1: uv ----
-$(DEMO_SENTINEL)/uv-installed:
-	curl -LsSf https://astral.sh/uv/install.sh | sh
-	touch $@
-	@echo ">>> uv ready at $(UV)"
-
-# ---- Stage 2: venv (Python 3.12 — llvmlite 0.44 doesn't support 3.14) ----
-$(DEMO_SENTINEL)/demo-venv: $(DEMO_SENTINEL)/uv-installed
-	$(UV) venv $(VENV) --python 3.12
-	touch $@
-	@echo ">>> venv at $(VENV) (python 3.12)"
-
-# ---- Stage 3: Python deps + install package in editable mode ----
-$(DEMO_SENTINEL)/demo-deps: $(DEMO_SENTINEL)/demo-venv
-	$(VENV_PIP) \
-	    "vllm==0.18.0" \
-	    transformers \
-	    accelerate \
-	    streamlit \
-	    pynvml \
-	    "huggingface_hub[cli]" \
-	    openai \
-	    triton \
-	    locust \
-	    pyspark
-	$(VENV_PIP) -e "$(DEMO_DIR)"
-	@[ -n "$(TURBO_DIR)" ] && $(VENV_PIP) -e "$(TURBO_DIR)" || true
-	touch $@
-	@echo ">>> demo deps installed (vllm==0.18.0)"
-
-# ---- Stage 4: model download ----
-# Model is public — no HF login needed.
-demo-model: $(DEMO_SENTINEL)/demo-deps | $(MODEL_DIR)
-	$(VENV_PY) -c "from huggingface_hub import snapshot_download; \
-snapshot_download('$(DEMO_MODEL_HF)', local_dir='$(DEMO_MODEL_DIR)')"
-	@echo ">>> model ready: $(DEMO_MODEL_DIR)"
-
-# ---- Phony targets ----
-
-bench-bert: $(DEMO_SENTINEL)/demo-deps
-	cd $(DEMO_DIR) && $(VENV_PY) -m turboquant_demo.bert
-
-bench-tq: $(DEMO_SENTINEL)/demo-deps
-	@curl -sf http://localhost:8000/health >/dev/null 2>&1 || \
-	    { echo ">>> TQ server not running — run: make demo-servers"; exit 1; }
-	@curl -sf http://localhost:8001/health >/dev/null 2>&1 || \
-	    { echo ">>> Baseline server not running — run: make demo-servers"; exit 1; }
-	cd $(DEMO_DIR) && $(VENV_PY) -m turboquant_demo.sweep
-	@echo ">>> results: $(DEMO_DIR)/bench_results.json"
-
-bench-spark: $(DEMO_SENTINEL)/demo-deps
-	cd $(DEMO_DIR) && $(VENV_PY) -m turboquant_demo.pipeline \
-	    --generate \
-	    --input  data/returns.parquet \
-	    --output data/profiles.parquet
-	@echo ">>> profiles: $(DEMO_DIR)/data/profiles.parquet"
-
-bench-pipeline: $(DEMO_SENTINEL)/demo-deps
-	@curl -sf http://localhost:8000/health >/dev/null 2>&1 || \
-	    { echo ">>> TQ server not running — run: make demo-servers"; exit 1; }
-	cd $(DEMO_DIR) && $(VENV_PY) -m turboquant_demo.latency
-
-demo-servers: $(DEMO_SENTINEL)/demo-deps
-	@echo ">>> Splitting A4000 16GB: 0.42 each, eager mode (baseline :8001, TQ :8000)"
-	$(DEMO_DIR)/scripts/start_servers.sh "$(DEMO_MODEL_DIR)"
-
-demo-fit: $(DEMO_SENTINEL)/demo-deps
-	cd $(DEMO_DIR) && $(VENV)/bin/streamlit run turboquant_demo/app.py \
-	    --browser.gatherUsageStats false \
-	    --server.headless true
-
-bench-locust: $(DEMO_SENTINEL)/demo-deps
-	@curl -sf http://localhost:8000/health >/dev/null 2>&1 || \
-	    { echo ">>> TQ server not running — run: make demo-servers"; exit 1; }
-	@curl -sf http://localhost:8001/health >/dev/null 2>&1 || \
-	    { echo ">>> Baseline server not running — run: make demo-servers"; exit 1; }
-	cd $(DEMO_DIR) && $(VENV)/bin/locust \
-	    -f turboquant_demo/locustfile.py \
-	    --headless \
-	    -u $(LOCUST_USERS) -r $(LOCUST_RATE) -t $(LOCUST_TIME) \
-	    --csv $(LOCUST_CSV) \
-	    --host http://localhost:8000
-	@echo ">>> results: $(LOCUST_CSV)_stats.csv"
-
-locust-ui: $(DEMO_SENTINEL)/demo-deps
-	@curl -sf http://localhost:8000/health >/dev/null 2>&1 || \
-	    { echo ">>> TQ server not running — run: make demo-servers"; exit 1; }
-	@echo ">>> Locust UI at http://localhost:8089"
-	cd $(DEMO_DIR) && $(VENV)/bin/locust \
-	    -f turboquant_demo/locustfile.py \
-	    --host http://localhost:8000
-
-clean-demo:
-	-kill $$(cat /tmp/vllm-base.pid 2>/dev/null) 2>/dev/null; rm -f /tmp/vllm-base.pid
-	-kill $$(cat /tmp/vllm-tq.pid  2>/dev/null) 2>/dev/null; rm -f /tmp/vllm-tq.pid
-	rm -rf $(DEMO_DIR)/.venv $(DEMO_DIR)/.sentinel
-	@echo ">>> demo venv cleaned (source preserved in turboquant-demo/)"
-
-# ---- end of demo section — Python source lives in turboquant-demo/ ----
