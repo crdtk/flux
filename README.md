@@ -2,8 +2,8 @@
 
 Budget local LLM inference workstation built during the 2026 RAM crisis.
 Reuses legacy DDR4 SODIMMs (€0 cost) on a Mini-ITX server board with a PCIe
-switch fanning out to 4× RTX PRO 6000 Blackwell Max-Q.
-Target: Qwen3.5-397B-A17B Q4 at ~130 tok/s in a Berlin apartment under 1.5 kW.
+switch providing 4× PCIe x8 GPU slots.
+Berlin apartment build — silence first-class, target under 1.5 kW.
 
 ## Hardware
 
@@ -14,7 +14,6 @@ Target: Qwen3.5-397B-A17B Q4 at ~130 tok/s in a Berlin apartment under 1.5 kW.
 | **RAM** | 2× Samsung M471A2K43BB1-CPB · 16 GB DDR4-2133 SODIMM = 32 GB (4 slots, 2 free) | INSTALLED |
 | **PCIe switch** | PLX Technology PEX 8749 · 48-lane 18-port Gen 3 · validated 2026-05-30 | INSTALLED ✓ |
 | **GPU backplanes** | 4× JMT JHHP1B · 1× SFF-8654 8i per backplane → PCIe x8 · 2 installed | 2 INSTALLED ✓ |
-| **GPUs** | 4× NVIDIA RTX PRO 6000 Blackwell Max-Q · 96 GB GDDR7 · 1.8 TB/s · 300 W · blower | TBD |
 | **Storage — boot** | Samsung 9100 PRO 8TB · M.2 PCIe 4.0 x4 · M2_1 · Manjaro KDE (btrfs) | INSTALLED |
 | **Storage — models** | WD_BLACK SN8100 8TB · M.2 PCIe 4.0 x8 · staging in PCIE7, target OCuLink | INSTALLED |
 | **PSU** | be quiet! Dark Power Pro 13 1600W · 80+ Titanium | INSTALLED |
@@ -54,14 +53,3 @@ RISKS.md              System risk register (all subsystems, severity-sorted)
 CLAUDE.md             AI assistant context and component reference paths
 ```
 
-## Performance Targets
-
-| Model | Quant | VRAM | GPUs | Est. tok/s |
-|-------|-------|------|------|------------|
-| Qwen3.5-397B-A17B (MoE, 17B active) | Q4 | 222 GB | 4 | ~130–150 |
-| DeepSeek-V3.2 (MoE, 37B active) | Q3 | ~285 GB | 4 | ~80–100 |
-| Llama 70B | Q4 | 38 GB | 1 | ~33 |
-| Llama 405B | Q4 | 220 GB | 3–4 | ~16 |
-
-MoE models win on this hardware: only active parameters are read per token.
-Qwen3.5-397B reads 17 B of 397 B per token — ~4× faster than a dense 70B.
