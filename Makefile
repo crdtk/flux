@@ -61,6 +61,25 @@
 #     Write configs and unit files as named define blocks.
 #     Emit with $(file >$@,$(VAR)) — no heredocs, no quoting issues.
 #
+# 18. Target the decision, not the payload.
+#     A feature's target is the config that switches it on.
+#     Files a package merely ships are prerequisites, not targets.
+#
+# 19. Lazy resolution extends to any apt-file-mappable path.
+#     A prerequisite outside /usr/bin earns its own pattern rule,
+#     not an explicit install recipe.
+#
+# 20. Minimal targets, minimal lines, maximal automation.
+#     The cheapest target is a file the action creates anyway: it
+#     encodes done-ness for free, replacing a gate variable, a .PHONY
+#     declaration and a phony name. Reshape the action until it
+#     produces one (delete what overrides, then own the drop-in).
+#
+# 21. No nested $(MAKE).
+#     Recursion exists only to dodge stale parse-time gates. The honest
+#     protocol is `make clean && make`: clean owns the deletions that
+#     reopen gates; the second invocation re-parses them fresh.
+#
 # ==========================================================
 
 MAKEFLAGS += --no-builtin-rules
@@ -144,12 +163,16 @@ PKG_APPS := \
   /usr/share/applications/code.desktop \
   /usr/share/applications/google-chrome.desktop \
   /usr/bin/digikam \
+  /usr/bin/flameshot \
+  /usr/bin/gh \
   /usr/bin/gwenview \
   /usr/bin/heif-convert \
   /usr/bin/lmstudio \
   /usr/bin/mc \
   /usr/bin/npm \
-  $(HEIF_THUMB_TARGET)
+  /usr/share/plasma/plasmoids/org.kde.plasma.weather/metadata.json \
+  $(HEIF_THUMB_TARGET) \
+  /etc/sddm.conf.d/30-x11-session.conf
 
 # ----------------------------------------------------------
 # COMPUTE — GPU compute stack (large downloads, runs last)
@@ -371,6 +394,23 @@ $(USER_HOME)/.config/systemd/user/default.target.wants/syncthing.service: /usr/b
 
 /usr/share/applications/code.desktop: /usr/bin/code
 
+## Global menu needs X11 — KWin on Wayland lacks the appmenu protocol (Qt, GTK and Electron alike)
+define SDDM_X11_CONF
+[Autologin]
+Session=plasmax11
+endef
+
+SDDM_LAST_SESSION := $(wildcard /var/lib/sddm/state.conf)
+
+## SDDM reads /etc/sddm.conf last — its Session line must go for conf.d to decide
+/etc/sddm.conf.d/30-x11-session.conf: /usr/share/xsessions/plasmax11.desktop
+	sed -i '/^Session=plasma$$/d' /etc/sddm.conf
+ifneq ($(SDDM_LAST_SESSION),)
+	sed -i 's|^Session=.*|Session=$<|' $(SDDM_LAST_SESSION)
+endif
+	$(file >$@,$(SDDM_X11_CONF))
+	@echo ">>> SDDM boots Plasma (X11) — global menu active after next login"
+
 /etc/apt/sources.list.d/code.list: /usr/share/keyrings/microsoft.gpg
 	echo 'deb [arch=amd64 signed-by=$<] https://packages.microsoft.com/repos/code stable main' > $@
 
@@ -447,11 +487,82 @@ $(UV):
 CLAUDE_BIN := $(USER_HOME)/.local/bin/claude
 SSH_KEY    := $(USER_HOME)/.ssh/id_ed25519
 
+## Title widget: text-only normally; close/min/max appear far-left only when
+## maximized — the one state borderless windows lack their own buttons (Unity).
+## AppName source, 10pt = default panel font: one continuous text band, no icons.
+## Clock: far right, date | time on one line, 24h, manual 14pt. The | is an
+## unquoted Qt format literal — the JS must stay single-quote-free, since the
+## recipe wraps $(strip TOP_PANEL_JS) in shell single quotes.
+## Weather: stock org.kde.plasma.weather (plasma-widgets-addons), provider dwd,
+## station Berlin-Alexanderplatz (10389, DWD MOSMIX catalogue), temp shown in
+## panel. placeInfo format is place_name|station_id (ion_dwd.cpp fetchForecast);
+## the name is display-only, the id drives the API. Flex Hub stays factory-default.
+## Tray must never host weather: its hidden auto-instance segfaults plasmashell on
+## exit (upstream 6.6.5). knownItems pre-seeds weather as known-but-disabled;
+## emptied extraItems is repopulated by tray auto-add on the post-script restart.
+## Enum formats differ per widget: antroids stores ints, digitalclock stores names.
+define TOP_PANEL_JS
+  var p = new Panel;
+  p.location = "top";
+  p.addWidget("com.github.chrtall.kppleMenu");
+  var t = p.addWidget("com.github.antroids.application-title-bar");
+  t.currentConfigGroup = ["Appearance"];
+  t.writeConfig("widgetElements", ["windowTitle"]);
+  t.writeConfig("overrideElementsMaximized", true);
+  t.writeConfig("widgetElementsMaximized", ["windowCloseButton", "windowMinimizeButton", "windowMaximizeButton", "windowTitle"]);
+  t.writeConfig("windowTitleSource", 0);
+  t.writeConfig("windowTitleSourceMaximized", 0);
+  t.writeConfig("windowTitleFontSize", 10);
+  t.writeConfig("windowTitleUndefined", "Plasma");
+  p.addWidget("org.kde.plasma.appmenu");
+  p.addWidget("org.kde.plasma.panelspacer");
+  var w = p.addWidget("org.kde.plasma.weather");
+  w.currentConfigGroup = ["WeatherStation"];
+  w.writeConfig("provider", "dwd");
+  w.writeConfig("placeInfo", "Berlin-Alex.|10389");
+  w.writeConfig("placeDisplayName", "Berlin-Alex.");
+  w.currentConfigGroup = ["Appearance"];
+  w.writeConfig("showTemperatureInCompactMode", true);
+  var s = p.addWidget("org.kde.plasma.systemtray");
+  s.currentConfigGroup = ["General"];
+  s.writeConfig("extraItems", "");
+  s.writeConfig("knownItems", ["org.kde.plasma.weather"]);
+  p.addWidget("Plasma.Flex.Hub");
+  var c = p.addWidget("org.kde.plasma.digitalclock");
+  c.currentConfigGroup = ["Appearance"];
+  c.writeConfig("dateDisplayFormat", "BesideTime");
+  c.writeConfig("use24hFormat", 2);
+  c.writeConfig("autoFontAndSize", false);
+  c.writeConfig("fontSize", 14);
+  c.writeConfig("dateFormat", "custom");
+  c.writeConfig("customDateFormat", "dd.MM.yy |");
+endef
+
+PLASMOIDS := $(USER_HOME)/.local/share/plasma/plasmoids
+
 DOLPHIN_PREVIEW_OK := $(shell grep -c '^Show Preview=true' $(USER_HOME)/.config/kdeglobals 2>/dev/null)
-user: $(CLAUDE_BIN) $(USER_HOME)/.ssh/authorized_keys make-completion
+GLOBALMENU_OK      := $(shell grep -c 'org.kde.plasma.appmenu' $(USER_HOME)/.config/plasma-org.kde.plasma.desktop-appletsrc 2>/dev/null)
+KWIN_BORDERLESS_OK := $(shell grep -c '^BorderlessMaximizedWindows=true' $(USER_HOME)/.config/kwinrc 2>/dev/null)
+user: $(CLAUDE_BIN) $(USER_HOME)/.ssh/authorized_keys make-completion \
+      $(PLASMOIDS)/com.github.antroids.application-title-bar/metadata.json \
+      $(PLASMOIDS)/Plasma.Flex.Hub/metadata.json \
+      $(PLASMOIDS)/com.github.chrtall.kppleMenu/metadata.json
 ifeq ($(DOLPHIN_PREVIEW_OK),0)
 	kwriteconfig5 --file kdeglobals --group "KFileDialog Settings" --key "Show Preview" true
 	@echo ">>> Dolphin show preview enabled"
+endif
+ifeq ($(GLOBALMENU_OK),0)
+	gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell \
+	  --method org.kde.PlasmaShell.evaluateScript '$(strip $(TOP_PANEL_JS))' >/dev/null
+## addWidget builds each applet from default config before writeConfig lands;
+## a restart makes every widget initialize from the final on-disk config
+	systemctl --user restart plasma-plasmashell.service
+	@echo ">>> Top bar with global menu created"
+endif
+ifeq ($(KWIN_BORDERLESS_OK),0)
+	kwriteconfig6 --file kwinrc --group Windows --key BorderlessMaximizedWindows true
+	gdbus call --session --dest org.kde.KWin --object-path /KWin --method org.kde.KWin.reconfigure >/dev/null
+	@echo ">>> Borderless maximized windows enabled"
 endif
 	/usr/bin/kbuildsycoca6
 
@@ -477,6 +588,18 @@ MAKE_COMPLETION = /usr/share/bash-completion/completions/make
 make-completion:
 	@grep -q 'bash-completion/completions/make' $(BASHRC) 2>/dev/null || echo 'source $(MAKE_COMPLETION)' >> $(BASHRC)
 	@echo ">>> Make autocomplete enabled"
+
+## KDE Store widgets — repo URL and package subdir, keyed by plugin id
+WIDGET_SRC_com.github.antroids.application-title-bar := https://github.com/antroids/application-title-bar package
+WIDGET_SRC_Plasma.Flex.Hub                           := https://github.com/zayronxio/Plasma.Flex.Hub .
+WIDGET_SRC_com.github.chrtall.kppleMenu              := https://github.com/ChrTall/kppleMenu package
+
+$(PLASMOIDS)/%/metadata.json:
+	rm -rf /tmp/$*
+	git clone --depth 1 $(word 1,$(WIDGET_SRC_$*)) /tmp/$*
+	kpackagetool6 -t Plasma/Applet -i /tmp/$*/$(word 2,$(WIDGET_SRC_$*))
+	rm -rf /tmp/$*
+	@echo ">>> Widget $* installed"
 
 
 # ----------------------------------------------------------
@@ -541,7 +664,7 @@ eject:
 # ----------------------------------------------------------
 
 UNTRACKED_PKGS  := git avahi-daemon arp-scan nmap appmenu-gtk3-module appmenu-registrar
-LAZILY_RESOLVED := syncthing npm mc libheif-examples gwenview ddclient cockpit cockpit-files cmake g++-14 rclone
+LAZILY_RESOLVED := syncthing npm mc libheif-examples gwenview ddclient cockpit cockpit-files cmake g++-14 rclone plasma-session-x11 flameshot gh plasma-widgets-addons
 
 /usr/bin/apt-file: | /etc/systemd/system/packagekit.service
 	$(APT) update
@@ -558,6 +681,12 @@ LAZILY_RESOLVED := syncthing npm mc libheif-examples gwenview ddclient cockpit c
 /usr/bin/%: | /usr/bin/apt-file
 	$(APT) install -y $$(apt-file search $@ 2>/dev/null | awk -F': ' '{print $$1}' | head -1)
 
+/usr/share/xsessions/%.desktop: | /usr/bin/apt-file
+	$(APT) install -y $$(apt-file search $@ 2>/dev/null | awk -F': ' '{print $$1}' | head -1)
+
+/usr/share/plasma/plasmoids/%/metadata.json: | /usr/bin/apt-file
+	$(APT) install -y $$(apt-file search $@ 2>/dev/null | awk -F': ' '{print $$1}' | head -1)
+
 $(DOWNLOADS_DIR)/%: | $(DOWNLOADS_DIR)
 	curl -fL --retry 5 --retry-delay 3 --progress-bar -A "Mozilla/5.0" $(filter %/$*,$(DEB_URLS)) -o $@
 
@@ -569,6 +698,16 @@ $(DOWNLOADS_DIR):
 # ----------------------------------------------------------
 	
 .PHONY: clean
+## user clean deletes ALL top panels; `make clean && make` then rebuilds the
+## bar from TOP_PANEL_JS through the reopened GLOBALMENU_OK gate (principle 21)
+define REMOVE_TOP_PANELS_JS
+  var all = panels();
+  for (var i = 0; i < all.length; i++) {
+    if (all[i].location == "top") {
+      all[i].remove();
+    }
+  }
+endef
 clean:
 ifeq ($(shell id -u),0)
 	rm -f /usr/share/applications/google-chrome.desktop /usr/share/applications/code.desktop
@@ -577,6 +716,8 @@ ifeq ($(shell id -u),0)
 	rm -f /etc/systemd/system/packagekit.service
 else
 	rm -rf $(USER_HOME)/.cache/thumbnails/fail/
+	gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell \
+	  --method org.kde.PlasmaShell.evaluateScript '$(strip $(REMOVE_TOP_PANELS_JS))' >/dev/null || true
 endif
 
 # ----------------------------------------------------------
