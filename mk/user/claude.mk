@@ -1,9 +1,14 @@
-CLAUDE_BIN      := $(USER_HOME)/.local/bin/claude
-SSH_KEY         := $(USER_HOME)/.ssh/id_ed25519
-BASHRC          := $(USER_HOME)/.bashrc
-MAKE_COMPLETION := /usr/share/bash-completion/completions/make
+CLAUDE_BIN          := $(USER_HOME)/.local/bin/claude
+SSH_KEY             := $(USER_HOME)/.ssh/id_ed25519
+BASHRC              := $(USER_HOME)/.bashrc
+MAKE_COMPLETION     := /usr/share/bash-completion/completions/make
+MAKE_COMPLETION_OK  := $(shell grep -c 'bash-completion/completions/make' $(BASHRC) 2>/dev/null)
 
-user: $(CLAUDE_BIN) $(USER_HOME)/.ssh/authorized_keys make-completion
+user:: $(CLAUDE_BIN) $(USER_HOME)/.ssh/authorized_keys
+ifeq ($(MAKE_COMPLETION_OK),0)
+	echo 'source $(MAKE_COMPLETION)' >> $(BASHRC)
+	@echo ">>> Make autocomplete enabled"
+endif
 
 $(CLAUDE_BIN):
 	mkdir -p $(dir $@)
@@ -19,7 +24,3 @@ $(SSH_KEY):
 	ssh-keygen -t ed25519 -f $@ -N ""
 	@echo ">>> SSH key generated: $@"
 
-.PHONY: make-completion
-make-completion:
-	@grep -q 'bash-completion/completions/make' $(BASHRC) 2>/dev/null || echo 'source $(MAKE_COMPLETION)' >> $(BASHRC)
-	@echo ">>> Make autocomplete enabled"

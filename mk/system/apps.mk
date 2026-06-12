@@ -7,6 +7,7 @@ HEIF_THUMB_TARGET      := $(and $(filter 0,$(shell grep -c 'image/heif' $(IMAGET
 .PHONY: $(HEIF_THUMB_TARGET)
 KIMG_HEIF_SO           := /usr/lib/x86_64-linux-gnu/qt5/plugins/imageformats/kimg_heif.so
 KUBUNTU_BACKPORTS_LIST := /etc/apt/sources.list.d/kubuntu-ppa-ubuntu-backports-$(UBUNTU_CODENAME).sources
+OBS_PPA_LIST           := /etc/apt/sources.list.d/obsproject-ubuntu-obs-studio-$(UBUNTU_CODENAME).sources
 SDDM_LAST_SESSION      := $(wildcard /var/lib/sddm/state.conf)
 
 DESKTOP_PKG_google-chrome  := google-chrome-stable
@@ -18,6 +19,7 @@ PKG_APPS += \
   /usr/share/applications/code.desktop \
   /usr/share/applications/google-chrome.desktop \
   /usr/bin/digikam \
+  /usr/bin/kdenlive \
   /usr/bin/flameshot \
   /usr/bin/gh \
   /usr/bin/gwenview \
@@ -25,6 +27,7 @@ PKG_APPS += \
   /usr/bin/lmstudio \
   /usr/bin/mc \
   /usr/bin/npm \
+  /usr/bin/obs \
   /usr/bin/plank \
   /usr/share/plasma/plasmoids/org.kde.plasma.weather/metadata.json \
   $(HEIF_THUMB_TARGET) \
@@ -66,12 +69,19 @@ endif
 	$(APT) install -y $(DOWNLOADS_DIR)/LM-Studio-0.4.7-4-x64.deb
 	sed -i 's|Exec=/opt/LM-Studio/lm-studio|Exec=/opt/LM-Studio/lm-studio --use-gl=desktop|' /usr/share/applications/lm-studio.desktop
 
-/usr/bin/digikam: $(KUBUNTU_BACKPORTS_LIST)
+/usr/bin/digikam /usr/bin/kdenlive: $(KUBUNTU_BACKPORTS_LIST)
 	$(APT) update
-	$(APT) install -y digikam
+	$(APT) install -y $(@F)
 
 $(KUBUNTU_BACKPORTS_LIST):
 	add-apt-repository -y ppa:kubuntu-ppa/backports
+
+/usr/bin/obs: $(OBS_PPA_LIST)
+	$(APT) update
+	$(APT) install -y obs-studio
+
+$(OBS_PPA_LIST):
+	add-apt-repository -y ppa:obsproject/obs-studio
 
 $(IMAGETHUMB_DESKTOP): $(KIMG_HEIF_SO)
 	grep -q 'image/heif' $@ || sed -i 's|image/avif;|image/avif;image/heif;image/heic;|' $@

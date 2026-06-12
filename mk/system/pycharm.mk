@@ -21,5 +21,5 @@ PYCHARM_RELEASES_API := https://data.services.jetbrains.com/products/releases?co
 /opt/pycharm-community/bin/pycharm.sh: PYCHARM_TARBALL = $(DOWNLOADS_DIR)/$(notdir $(PYCHARM_URL))
 /opt/pycharm-community/bin/pycharm.sh: | $(DOWNLOADS_DIR)
 	curl -fL --retry 5 --retry-delay 3 --progress-bar -A "Mozilla/5.0" $(PYCHARM_URL) -o $(PYCHARM_TARBALL)
-	tar -xz -C /opt --transform 's|pycharm-community-[^/]*|pycharm-community|' -f $(PYCHARM_TARBALL)
+	tar -xz -C /opt --transform 's|^pycharm-[^/]*|pycharm-community|' -f $(PYCHARM_TARBALL)
 	@echo ">>> PyCharm Community installed to /opt/pycharm-community"

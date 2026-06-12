@@ -1,7 +1,6 @@
-HAS_BMC         := $(shell dmidecode -t 38 2>/dev/null | grep -c 'IPMI Device Information')
-GRUB_TIMEOUT    := 3
-PAM_SSS_FILES   := $(shell grep -rl pam_sss /etc/pam.d/ 2>/dev/null)
-GRUB_TIMEOUT_OK := $(shell grep -qx 'GRUB_TIMEOUT=$(GRUB_TIMEOUT)' /etc/default/grub 2>/dev/null && echo 1)
+HAS_BMC       := $(shell dmidecode -t 38 2>/dev/null | grep -c 'IPMI Device Information')
+GRUB_TIMEOUT  := 3
+PAM_SSS_FILES := $(shell grep -rl pam_sss /etc/pam.d/ 2>/dev/null)
 
 HARDENING += \
   /etc/systemd/system/packagekit.service \
@@ -12,8 +11,8 @@ HARDENING += \
   /etc/systemd/system/openipmi.service \
   /etc/apt/preferences.d/no-snapd \
   /etc/sysctl.d/90-inotify.conf \
-  $(if $(PAM_SSS_FILES),fix-pam-sss,) \
-  $(if $(GRUB_TIMEOUT_OK),,set-grub-timeout)
+  /etc/default/grub.d/99-timeout.cfg \
+  $(if $(PAM_SSS_FILES),fix-pam-sss,)
 
 /etc/systemd/system/packagekit.service:
 	rm -f /etc/apt/sources.list.d/jammy-backports.list
@@ -85,13 +84,13 @@ else
 	systemctl enable --now openipmi
 endif
 
+/etc/default/grub.d/99-timeout.cfg:
+	mkdir -p $(dir $@)
+	printf 'GRUB_TIMEOUT=$(GRUB_TIMEOUT)\n' > $@
+	update-grub
+	@echo ">>> GRUB timeout = $(GRUB_TIMEOUT)"
+
 .PHONY: fix-pam-sss
 fix-pam-sss:
 	grep -rl pam_sss /etc/pam.d/ 2>/dev/null | xargs -r sed -i '/pam_sss/d'
 	@echo ">>> pam_sss removed from PAM"
-
-.PHONY: set-grub-timeout
-set-grub-timeout:
-	sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=$(GRUB_TIMEOUT)/' /etc/default/grub
-	update-grub
-	@echo ">>> GRUB timeout = $(GRUB_TIMEOUT)"

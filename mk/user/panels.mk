@@ -90,7 +90,7 @@ define LAUNCHER_ADD_JS
   }
 endef
 
-user:
+user::
 ifeq ($(PLASMASHELL_RUNNING),0)
 	systemctl --user reset-failed plasma-plasmashell.service 2>/dev/null || true
 	systemctl --user start plasma-plasmashell.service
@@ -154,4 +154,3 @@ ifneq ($(PLASMASHELL_NEEDS_RESTART),)
 	systemctl --user restart plasma-plasmashell.service
 	@echo ">>> plasmashell restarted — run make again to apply settings"
 endif
-	/usr/bin/kbuildsycoca6
