@@ -3,9 +3,9 @@ WIDGET_SRC_com.github.antroids.application-title-bar := https://github.com/antro
 WIDGET_SRC_Plasma.Flex.Hub                           := https://github.com/zayronxio/Plasma.Flex.Hub .
 WIDGET_SRC_com.github.chrtall.kppleMenu              := https://github.com/ChrTall/kppleMenu package
 
-user:: $(PLASMOIDS)/com.github.antroids.application-title-bar/metadata.json \
-       $(PLASMOIDS)/Plasma.Flex.Hub/metadata.json \
-       $(PLASMOIDS)/com.github.chrtall.kppleMenu/metadata.json
+USER_FILES += $(PLASMOIDS)/com.github.antroids.application-title-bar/metadata.json \
+             $(PLASMOIDS)/Plasma.Flex.Hub/metadata.json \
+             $(PLASMOIDS)/com.github.chrtall.kppleMenu/metadata.json
 
 $(PLASMOIDS)/%/metadata.json:
 	rm -rf /tmp/$*

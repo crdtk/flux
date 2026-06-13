@@ -65,6 +65,7 @@ HARDENING  :=
 MANAGEMENT :=
 COMPUTE    :=
 STORAGE    :=
+USER_FILES :=
 
 # ----------------------------------------------------------
 # Feature modules

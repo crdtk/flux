@@ -7,7 +7,7 @@ Type=Application
 X-KDE-autostart-enabled=true
 endef
 
-user:: $(USER_HOME)/.config/autostart/albert.desktop
+USER_FILES += $(USER_HOME)/.config/autostart/albert.desktop
 
 $(USER_HOME)/.config/autostart/albert.desktop:
 	mkdir -p $(dir $@)

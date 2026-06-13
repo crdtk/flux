@@ -1,4 +1,4 @@
-.PHONY: user
+.PHONY: configure-panels
 
 DOLPHIN_PREVIEW_OK := $(shell grep -c '^Show Preview=true' $(USER_HOME)/.config/kdeglobals 2>/dev/null)
 GLOBALMENU_OK      := $(shell grep -c 'org.kde.plasma.appmenu' $(USER_HOME)/.config/plasma-org.kde.plasma.desktop-appletsrc 2>/dev/null)
@@ -90,7 +90,7 @@ define LAUNCHER_ADD_JS
   }
 endef
 
-user::
+configure-panels:
 ifeq ($(PLASMASHELL_RUNNING),0)
 	systemctl --user reset-failed plasma-plasmashell.service 2>/dev/null || true
 	systemctl --user start plasma-plasmashell.service

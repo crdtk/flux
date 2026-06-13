@@ -4,7 +4,10 @@ BASHRC              := $(USER_HOME)/.bashrc
 MAKE_COMPLETION     := /usr/share/bash-completion/completions/make
 MAKE_COMPLETION_OK  := $(shell grep -c 'bash-completion/completions/make' $(BASHRC) 2>/dev/null)
 
-user:: $(CLAUDE_BIN) $(USER_HOME)/.ssh/authorized_keys
+USER_FILES += $(CLAUDE_BIN) $(USER_HOME)/.ssh/authorized_keys
+
+.PHONY: configure-shell
+configure-shell:
 ifeq ($(MAKE_COMPLETION_OK),0)
 	echo 'source $(MAKE_COMPLETION)' >> $(BASHRC)
 	@echo ">>> Make autocomplete enabled"
