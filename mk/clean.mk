@@ -17,6 +17,7 @@ ifeq ($(shell id -u),0)
 else
 	rm -rf $(USER_HOME)/.cache/thumbnails/fail/
 	rm -f $(USER_HOME)/.config/autostart/albert.desktop
+	rm -f $(USER_HOME)/.local/share/applications/pycharm-community.desktop
 	kpackagetool6 -t Plasma/Applet -r com.github.antroids.application-title-bar 2>/dev/null || true
 	kpackagetool6 -t Plasma/Applet -r Plasma.Flex.Hub 2>/dev/null || true
 	kpackagetool6 -t Plasma/Applet -r com.github.chrtall.kppleMenu 2>/dev/null || true
