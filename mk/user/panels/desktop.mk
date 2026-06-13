@@ -1,4 +1,6 @@
-DOLPHIN_PREVIEW_OK := $(shell grep -c '^Show Preview=true' $(USER_HOME)/.config/kdeglobals 2>/dev/null)
+DOLPHIN_PREVIEW_OK        := $(shell grep -c '^Show Preview=true' $(USER_HOME)/.config/kdeglobals 2>/dev/null)
+## Non-empty when panels were created this run and plasmashell needs one restart at the end.
+PLASMASHELL_NEEDS_RESTART := $(or $(filter 0,$(GLOBALMENU_OK)),$(filter 0,$(DOCK_OK)),$(filter 0,$(DOCK_CONFIGURED_OK)))
 KWIN_BORDERLESS_OK := $(shell grep -c '^BorderlessMaximizedWindows=true' $(USER_HOME)/.config/kwinrc 2>/dev/null)
 ALBERT_HOTKEY_OK   := $(shell grep -c '^hotkey=Alt+Space' $(USER_HOME)/.config/albert/albert.conf 2>/dev/null)
 KRUNNER_CONFLICT   := $(shell grep -c 'Alt+Space' $(USER_HOME)/.config/kglobalshortcutsrc 2>/dev/null)

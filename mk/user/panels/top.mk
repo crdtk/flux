@@ -1,3 +1,5 @@
+include mk/user/panels/plasmashell.mk
+
 GLOBALMENU_OK := $(shell grep -c 'org.kde.plasma.appmenu' $(USER_HOME)/.config/plasma-org.kde.plasma.desktop-appletsrc 2>/dev/null)
 
 ## Title widget: text-only normally; close/min/max appear far-left only when

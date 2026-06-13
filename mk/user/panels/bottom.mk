@@ -1,3 +1,5 @@
+include mk/user/panels/plasmashell.mk
+
 DOCK_OK            := $(shell grep -B 10 'org.kde.plasma.icontasks' $(USER_HOME)/.config/plasma-org.kde.plasma.desktop-appletsrc 2>/dev/null | grep -c 'location=4')
 SCREEN_W           := $(shell xrandr --current 2>/dev/null | awk '/*/{split($$1,a,"x"); print a[1]; exit}')
 ## Gate on the config value we actually care about, not on knowing the panel ID at parse time.
