@@ -78,7 +78,7 @@ include mk/user/user.mk
 # Infrastructure — pattern rules and download target
 # ----------------------------------------------------------
 
-UNTRACKED_PKGS  := git avahi-daemon arp-scan nmap appmenu-gtk3-module appmenu-registrar python3-venv
+UNTRACKED_PKGS  := git avahi-daemon arp-scan nmap appmenu-gtk3-module appmenu-registrar
 LAZILY_RESOLVED := syncthing npm mc libheif-examples gwenview ddclient cockpit cockpit-files \
                    cmake g++-14 rclone plasma-session-x11 flameshot gh plasma-widgets-addons
 

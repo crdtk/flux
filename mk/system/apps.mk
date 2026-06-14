@@ -8,7 +8,6 @@ HEIF_THUMB_TARGET      := $(and $(filter 0,$(shell grep -c 'image/heif' $(IMAGET
 KIMG_HEIF_SO           := /usr/lib/x86_64-linux-gnu/qt5/plugins/imageformats/kimg_heif.so
 KUBUNTU_BACKPORTS_LIST := /etc/apt/sources.list.d/kubuntu-ppa-ubuntu-backports-$(UBUNTU_CODENAME).sources
 OBS_PPA_LIST           := /etc/apt/sources.list.d/obsproject-ubuntu-obs-studio-$(UBUNTU_CODENAME).sources
-DEADSNAKES_LIST        := /etc/apt/sources.list.d/deadsnakes-ubuntu-ppa-$(UBUNTU_CODENAME).sources
 SDDM_LAST_SESSION      := $(wildcard /var/lib/sddm/state.conf)
 
 DESKTOP_PKG_google-chrome  := google-chrome-stable
@@ -17,7 +16,6 @@ DESKTOP_FLAGS_google-chrome := --use-gl=desktop
 DESKTOP_FLAGS_code          := --disable-gpu
 
 PKG_APPS += \
-  /usr/bin/python3.12 \
   /usr/share/applications/code.desktop \
   /usr/share/applications/google-chrome.desktop \
   /usr/bin/digikam \
@@ -85,12 +83,6 @@ $(KUBUNTU_BACKPORTS_LIST):
 $(OBS_PPA_LIST):
 	add-apt-repository -y ppa:obsproject/obs-studio
 
-/usr/bin/python3.12: $(DEADSNAKES_LIST)
-	$(APT) update
-	$(APT) install -y python3.12 python3.12-venv
-
-$(DEADSNAKES_LIST):
-	add-apt-repository -y ppa:deadsnakes/ppa
 
 $(IMAGETHUMB_DESKTOP): $(KIMG_HEIF_SO)
 	grep -q 'image/heif' $@ || sed -i 's|image/avif;|image/avif;image/heif;image/heic;|' $@
