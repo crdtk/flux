@@ -1,4 +1,4 @@
-include mk/user/albert.mk
+#include mk/user/albert.mk
 include mk/user/shell.mk
 include mk/user/demos.mk
 include mk/user/panels/panels.mk

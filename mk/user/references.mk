@@ -23,7 +23,7 @@ References/Case/ENTHOO-PRO-II/Enthoo_Pro2_Manual_v1.1.pdf:
 
 References/Storage/SN8100/WD_Black_SN8100_Datasheet.pdf:
 	mkdir -p $(dir $@)
-	curl -fL --progress-bar -o $@ https://documents.sandisk.com/content/dam/asset-library/en_us/assets/public/sandisk/product/internal-drives/wd-black-ssd/data-sheet-wd-black-ssd-sn8100-nvme-ssd.pdf
+	#curl -fL --progress-bar -o $@ https://documents.sandisk.com/content/dam/asset-library/en_us/assets/public/sandisk/product/internal-drives/wd-black-ssd/data-sheet-wd-black-ssd-sn8100-nvme-ssd.pdf
 	@echo ">>> $@"
 
 References/Storage/MB111VP-B/MB111VP_B_Manual.pdf:

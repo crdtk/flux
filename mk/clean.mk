@@ -15,6 +15,9 @@ ifeq ($(shell id -u),0)
 	rm -f /etc/apt/preferences.d/no-snapd
 	rm -f /etc/systemd/system/packagekit.service
 	rm -f /etc/ddclient.conf
+	systemctl disable --now mnt-backup.automount mnt-backup.mount 2>/dev/null || true
+	rm -f /etc/systemd/system/mnt-backup.automount /etc/systemd/system/mnt-backup.mount
+	systemctl daemon-reload 2>/dev/null || true
 else
 	rm -rf $(USER_HOME)/.cache/thumbnails/fail/
 	rm -f $(USER_HOME)/.config/autostart/albert.desktop
