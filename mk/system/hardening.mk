@@ -126,6 +126,7 @@ After=multi-user.target
 
 [Service]
 Type=oneshot
+RemainAfterExit=yes
 ExecStart=/usr/local/sbin/disable-gpu-aspm
 
 [Install]

@@ -17,6 +17,8 @@ ifeq ($(shell id -u),0)
 	rm -f /etc/ddclient.conf
 	systemctl disable --now mnt-backup.automount mnt-backup.mount 2>/dev/null || true
 	rm -f /etc/systemd/system/mnt-backup.automount /etc/systemd/system/mnt-backup.mount
+	systemctl disable --now disable-gpu-aspm.service 2>/dev/null || true
+	rm -f /etc/systemd/system/disable-gpu-aspm.service /usr/local/sbin/disable-gpu-aspm
 	systemctl daemon-reload 2>/dev/null || true
 else
 	rm -rf $(USER_HOME)/.cache/thumbnails/fail/
