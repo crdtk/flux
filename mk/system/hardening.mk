@@ -16,6 +16,7 @@ HARDENING += \
   /etc/sysctl.d/90-inotify.conf \
   /etc/default/grub.d/99-timeout.cfg \
   $(if $(HAS_PLX_SWITCH),/etc/default/grub.d/99-pcie-aspm.cfg,) \
+  $(if $(HAS_PLX_SWITCH),/etc/systemd/system/disable-gpu-aspm.service,) \
   $(if $(PAM_SSS_FILES),fix-pam-sss,)
 
 /etc/systemd/system/packagekit.service:
@@ -94,12 +95,48 @@ endif
 	update-grub
 	@echo ">>> GRUB timeout = $(GRUB_TIMEOUT)"
 
-# pcie_aspm=off stops the GPU link entering L1 (Xid 79 trigger). Reboot to apply.
+# Sets the kernel ASPM policy off. NECESSARY BUT NOT SUFFICIENT on this board:
+# firmware keeps ASPM control (_OSC denies the OS), so the L1 bits stay set and
+# pcie_aspm=off is ignored. disable-gpu-aspm.service below does the real work.
 /etc/default/grub.d/99-pcie-aspm.cfg:
 	mkdir -p $(dir $@)
 	printf 'GRUB_CMDLINE_LINUX_DEFAULT="$$GRUB_CMDLINE_LINUX_DEFAULT pcie_aspm=off"\n' > $@
 	update-grub
-	@echo ">>> PCIe ASPM disabled (pcie_aspm=off) — reboot to apply"
+	@echo ">>> kernel ASPM policy off (firmware still owns L1 — see disable-gpu-aspm.service)"
+
+# Firmware owns ASPM, so clear the ASPM Control bits (LnkCtl[1:0]) directly on the
+# GPU and its upstream switch port every boot. This is what actually stops Xid 79.
+define DISABLE_GPU_ASPM_SCRIPT
+#!/bin/sh
+gpu=$$(lspci -D | awk '/VGA.*NVIDIA/{print $$1; exit}')
+[ -n "$$gpu" ] || exit 0
+parent=$$(basename "$$(readlink -f /sys/bus/pci/devices/$$gpu/..)")
+for d in "$$gpu" "$$parent"; do setpci -s "$$d" CAP_EXP+0x10.w=0:3; done
+endef
+
+/usr/local/sbin/disable-gpu-aspm:
+	mkdir -p $(dir $@)
+	$(file >$@,$(DISABLE_GPU_ASPM_SCRIPT))
+	chmod +x $@
+
+define DISABLE_GPU_ASPM_UNIT
+[Unit]
+Description=Clear PCIe ASPM L1 on the GPU link (firmware owns ASPM; pcie_aspm=off ignored)
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/disable-gpu-aspm
+
+[Install]
+WantedBy=multi-user.target
+endef
+
+/etc/systemd/system/disable-gpu-aspm.service: /usr/local/sbin/disable-gpu-aspm
+	$(file >$@,$(DISABLE_GPU_ASPM_UNIT))
+	systemctl daemon-reload
+	systemctl enable --now disable-gpu-aspm.service
+	@echo ">>> disable-gpu-aspm.service enabled — clears ASPM L1 on the GPU link each boot"
 
 .PHONY: fix-pam-sss
 fix-pam-sss:
