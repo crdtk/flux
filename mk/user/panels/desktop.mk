@@ -28,6 +28,7 @@ ifeq ($(ALBERT_HOTKEY_OK),0)
 endif
 ifneq ($(PLASMASHELL_NEEDS_RESTART),)
 	systemctl --user reset-failed plasma-plasmashell.service 2>/dev/null || true
-	systemctl --user restart plasma-plasmashell.service
-	@echo ">>> plasmashell restarted — run make again to apply settings"
+	@systemctl --user restart plasma-plasmashell.service 2>/dev/null \
+	  && echo ">>> plasmashell restarted — run make again to apply settings" \
+	  || echo ">>> WARNING: plasmashell restart failed (GPU down?) — settings apply on next good boot"
 endif

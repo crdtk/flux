@@ -20,12 +20,13 @@ endef
 .remove-bottom-panels:
 	gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell \
 	  --method org.kde.PlasmaShell.evaluateScript \
-	  'var all=panels();for(var i=0;i<all.length;i++){if(all[i].location==4){all[i].remove();}}' >/dev/null || true
+	  'var all=panels();for(var i=0;i<all.length;i++){if(all[i].location==4){all[i].remove();}}' >/dev/null 2>&1 || true
 
 configure-bottom-panel: .ensure-plasmashell .remove-bottom-panels
-	gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell \
-	  --method org.kde.PlasmaShell.evaluateScript '$(strip $(DOCK_PANEL_JS))' >/dev/null
-	@echo ">>> Bottom panel created"
+	@gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell \
+	  --method org.kde.PlasmaShell.evaluateScript '$(strip $(DOCK_PANEL_JS))' >/dev/null 2>&1 \
+	  && echo ">>> Bottom panel created" \
+	  || echo ">>> WARNING: bottom panel not created (plasmashell down)"
 	@ID=$$(grep -B 3 'org.kde.plasma.icontasks' $(USER_HOME)/.config/plasma-org.kde.plasma.desktop-appletsrc 2>/dev/null | grep -oP '(?<=\[Containments\]\[)\d+' | tail -1); \
 	 [ -n "$$ID" ] || { echo ">>> Dock not ready — run make again"; exit 0; }; \
 	 kwriteconfig6 --file $(USER_HOME)/.config/plasmashellrc --group "PlasmaViews" --group "Panel $$ID" --key "floating" "0"; \

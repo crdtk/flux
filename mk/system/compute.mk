@@ -1,4 +1,5 @@
 SYS_SM           := $(shell nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d '.' | grep -oE '^[0-9]+')
+GPU_BDF          := $(shell lspci -D 2>/dev/null | awk '/VGA.*NVIDIA/{print $$1; exit}')
 NVCC             := /usr/local/cuda/bin/nvcc
 CUDA_LIST        := /etc/apt/sources.list.d/cuda-ubuntu$(UBUNTU_VER)-x86_64.list
 CUDA_REPO        := https://developer.download.nvidia.com/compute/cuda/repos/ubuntu$(UBUNTU_VER)/x86_64

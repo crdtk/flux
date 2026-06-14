@@ -22,9 +22,17 @@ WAN_IF      := $(shell ip -o route show default | awk '{print $$5; exit}')
 WAN_CON     := $(shell nmcli -t -g GENERAL.CONNECTION device show $(WAN_IF) 2>/dev/null)
 DYNV6_TOKEN  = $(shell sed -n 's/^password=//p' $(PROJECTS)/secrets/ddclient.conf | tr -d "'\"")
 
+# Tailscale repo is keyed per Ubuntu release; override if the current codename
+# isn't published yet:  sudo make TS_DIST=oracular /usr/bin/tailscale
+TS_DIST ?= $(UBUNTU_CODENAME)
+TS_CONNECTED := $(shell tailscale status >/dev/null 2>&1 && echo 1)
+TS_AUTHKEY    = $(shell cat $(PROJECTS)/secrets/tailscale.authkey 2>/dev/null)
+
 MANAGEMENT += \
   /etc/NetworkManager/conf.d/ipv6-stable.conf \
   /etc/ddclient.conf \
+  /usr/bin/tailscale \
+  $(if $(wildcard $(PROJECTS)/secrets/tailscale.authkey),$(if $(TS_CONNECTED),,tailscale-up)) \
   /etc/systemd/system/sockets.target.wants/cockpit.socket \
   /etc/ssh/sshd_config.d/lan-password.conf \
   /etc/NetworkManager/conf.d/captive-portal.conf \
@@ -70,6 +78,24 @@ endef
 	nmcli connection modify "$(WAN_CON)" ipv6.addr-gen-mode eui64 ipv6.ip6-privacy 0
 	nmcli connection up "$(WAN_CON)"
 	@echo ">>> IPv6 stable EUI-64 applied on $(WAN_IF) ($(WAN_CON))"
+
+# Keyring path matches Tailscale's official installer (and the self-updating
+# tailscale-archive-keyring pkg), so script-install and make-install converge.
+# The noarmor.gpg is already dearmored upstream — store it as-is.
+/usr/share/keyrings/tailscale-archive-keyring.gpg:
+	mkdir -p $(dir $@)
+	curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/$(TS_DIST).noarmor.gpg > $@
+
+/etc/apt/sources.list.d/tailscale.list: /usr/share/keyrings/tailscale-archive-keyring.gpg
+	echo 'deb [signed-by=$<] https://pkgs.tailscale.com/stable/ubuntu $(TS_DIST) main' > $@
+
+# Non-interactive node auth via a reusable key in secrets/ (mirrors the dynv6
+# token). Gated in MANAGEMENT like configure-syncthing-gui: only runs when a key
+# exists and the node isn't connected, so it's a no-op on every later make.
+.PHONY: tailscale-up
+tailscale-up: /usr/bin/tailscale
+	tailscale up --authkey=$(TS_AUTHKEY) --ssh
+	@echo ">>> Tailscale connected — check 'tailscale status'"
 
 $(PROJECTS)/secrets/ddclient.conf: | $(PROJECTS)
 	sudo -u $(RUN_AS_USER) git clone git@github.com:crdtk/secrets.git $(PROJECTS)/secrets

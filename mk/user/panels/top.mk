@@ -58,9 +58,10 @@ endef
 .remove-top-panels:
 	gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell \
 	  --method org.kde.PlasmaShell.evaluateScript \
-	  'var all=panels();for(var i=0;i<all.length;i++){if(all[i].location==3){all[i].remove();}}' >/dev/null || true
+	  'var all=panels();for(var i=0;i<all.length;i++){if(all[i].location==3){all[i].remove();}}' >/dev/null 2>&1 || true
 
 configure-top-panel: .ensure-plasmashell .remove-top-panels
-	gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell \
-	  --method org.kde.PlasmaShell.evaluateScript '$(strip $(TOP_PANEL_JS))' >/dev/null
-	@echo ">>> Top panel created"
+	@gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell \
+	  --method org.kde.PlasmaShell.evaluateScript '$(strip $(TOP_PANEL_JS))' >/dev/null 2>&1 \
+	  && echo ">>> Top panel created" \
+	  || echo ">>> WARNING: top panel not created (plasmashell down)"
