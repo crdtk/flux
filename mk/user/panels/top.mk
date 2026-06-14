@@ -1,7 +1,5 @@
 include mk/user/panels/plasmashell.mk
 
-GLOBALMENU_OK := $(shell grep -c 'org.kde.plasma.appmenu' $(USER_HOME)/.config/plasma-org.kde.plasma.desktop-appletsrc 2>/dev/null)
-
 ## Title widget: text-only normally; close/min/max appear far-left only when
 ## maximized — the one state borderless windows lack their own buttons (Unity).
 ## AppName source, 10pt = default panel font: one continuous text band, no icons.
@@ -56,11 +54,11 @@ endef
 .PHONY: configure-top-panel .remove-top-panels
 
 .remove-top-panels:
-	gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell \
+	@gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell \
 	  --method org.kde.PlasmaShell.evaluateScript \
 	  'var all=panels();for(var i=0;i<all.length;i++){if(all[i].location==3){all[i].remove();}}' >/dev/null 2>&1 || true
 
-configure-top-panel: .ensure-plasmashell .remove-top-panels
+configure-top-panel: .reset-panels
 	@gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell \
 	  --method org.kde.PlasmaShell.evaluateScript '$(strip $(TOP_PANEL_JS))' >/dev/null 2>&1 \
 	  && echo ">>> Top panel created" \
