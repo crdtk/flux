@@ -19,6 +19,7 @@ LAN_SUBNET := $(shell ip route | awk '/proto kernel/ && !/wl|ww|lo|vir|br-|docke
 # DynDNS reaches crucible over IPv6 (IPv4 is carrier-NAT). Publish a stable
 # EUI-64 address so the AAAA record matches the FRITZ!Box port forwarding.
 WAN_IF      := $(shell ip -o route show default | awk '{print $$5; exit}')
+WAN_CON     := $(shell nmcli -t -g GENERAL.CONNECTION device show $(WAN_IF) 2>/dev/null)
 DYNV6_TOKEN  = $(shell sed -n 's/^password=//p' $(PROJECTS)/secrets/ddclient.conf | tr -d "'\"")
 
 MANAGEMENT += \
@@ -62,11 +63,13 @@ endef
 
 # EUI-64 IID makes crucible's global IPv6 stable and predictable, matching the
 # suffix the FRITZ!Box forwards 22/8384/80 to. Privacy addresses rotate and break
-# inbound. Reconnect WAN after applying for the address to change.
+# inbound. addr-gen-mode applies only on reactivation, so set it on the WAN
+# connection and bounce it — briefly drops the link (fine, the box is local).
 /etc/NetworkManager/conf.d/ipv6-stable.conf:
 	$(file >$@,$(NM_IPV6_STABLE))
-	systemctl reload NetworkManager
-	@echo ">>> IPv6 stable EUI-64 enabled on $(WAN_IF) — reconnect WAN to apply"
+	nmcli connection modify "$(WAN_CON)" ipv6.addr-gen-mode eui64 ipv6.ip6-privacy 0
+	nmcli connection up "$(WAN_CON)"
+	@echo ">>> IPv6 stable EUI-64 applied on $(WAN_IF) ($(WAN_CON))"
 
 $(PROJECTS)/secrets/ddclient.conf: | $(PROJECTS)
 	sudo -u $(RUN_AS_USER) git clone git@github.com:crdtk/secrets.git $(PROJECTS)/secrets
