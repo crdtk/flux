@@ -98,7 +98,7 @@ tailscale-up: /usr/bin/tailscale
 	@echo ">>> Tailscale connected — check 'tailscale status'"
 
 $(PROJECTS)/secrets/ddclient.conf: | $(PROJECTS)
-	sudo -u $(RUN_AS_USER) git clone git@github.com:crdtk/secrets.git $(PROJECTS)/secrets
+	runuser -u $(RUN_AS_USER) -- git clone git@github.com:crdtk/secrets.git $(PROJECTS)/secrets
 
 $(PROJECTS):
 	mkdir -p $@
@@ -159,6 +159,6 @@ wait-syncthing-api: $(USER_HOME)/.config/systemd/user/default.target.wants/synct
 
 $(USER_HOME)/.config/systemd/user/default.target.wants/syncthing.service: /usr/bin/syncthing
 	loginctl enable-linger $(RUN_AS_USER)
-	sudo -u $(RUN_AS_USER) env XDG_RUNTIME_DIR=/run/user/$(RUN_AS_UID) \
+	runuser -u $(RUN_AS_USER) -- env XDG_RUNTIME_DIR=/run/user/$(RUN_AS_UID) \
 		systemctl --user enable --now syncthing
 	@echo ">>> Syncthing enabled"
