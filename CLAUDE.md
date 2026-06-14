@@ -19,7 +19,7 @@ Severity convention across all RISKS files: 💀 DAMAGE · 🔴 BLOCKER · 🟡 
 Check these before asking about specs or compatibility of owned hardware.
 
 - **Motherboard PDF**: `References/Motherboard/E3C256D4I-2T.pdf`
-- **Case manual**: `References/Case/ENTHOO PRO II/Enthoo_Pro2_Manual_v1.1.pdf`
+- **Case manual**: `References/Case/ENTHOO-PRO-II/Enthoo_Pro2_Manual_v1.1.pdf`
 - **WD_BLACK SN8100 datasheet**: `References/Storage/SN8100/WD_Black_SN8100_Datasheet.pdf`
 - **ICY DOCK MB111VP-B** (U.2 PCIe bracket adapter): `References/Storage/MB111VP-B/MB111VP_B_Manual.pdf`
 - **ICY DOCK MB705M2P-B** (M.2→U.2 converter, owned): `References/Storage/MB705M2P-B/MB705M2P-B_Manual.pdf`
