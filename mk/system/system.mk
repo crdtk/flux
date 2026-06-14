@@ -11,7 +11,7 @@ include mk/system/storage.mk
 COMPUTE_CAPABLE := $(shell [ -n "$(SYS_SM)" ] && [ "$(SYS_SM)" -ge 75 ] && echo 1)
 SN8100_PRESENT  := $(shell test -e /dev/disk/by-label/backup && echo 1)
 
-INSTALL := $(HARDENING) $(MANAGEMENT) $(PKG_APPS) \
+INSTALL := $(HARDENING) $(MANAGEMENT) $(PKG_APPS) $(DISPLAY_CONFIG) \
            $(if $(COMPUTE_CAPABLE),$(COMPUTE),) \
            $(if $(SN8100_PRESENT),$(STORAGE),)
 PENDING := $(filter-out $(wildcard $(INSTALL)),$(INSTALL))

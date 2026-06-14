@@ -65,6 +65,7 @@ HARDENING  :=
 MANAGEMENT :=
 COMPUTE    :=
 STORAGE    :=
+DISPLAY_CONFIG :=
 USER_FILES :=
 
 # ----------------------------------------------------------
@@ -72,6 +73,7 @@ USER_FILES :=
 # ----------------------------------------------------------
 
 include mk/clean.mk
+include mk/display.mk
 include mk/system/system.mk
 include mk/user/user.mk
 
