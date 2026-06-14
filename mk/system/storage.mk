@@ -48,6 +48,7 @@ detect-sn8100:
 
 .PHONY: eject
 eject:
-	@[ -n "$(SN8100_DEV)" ] || { echo "SN8100 not found"; exit 1; }
-	echo 1 > /sys/block/$(SN8100_DEV)/device/remove
-	@echo ">>> Ejected $(SN8100_DEV)"
+	@if [ -n "$(SN8100_DEV)" ]; then \
+	   echo 1 > /sys/block/$(SN8100_DEV)/device/remove; \
+	   echo ">>> Ejected $(SN8100_DEV)"; \
+	 else echo ">>> SN8100 not found — nothing to eject"; fi
