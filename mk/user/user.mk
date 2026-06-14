@@ -16,4 +16,6 @@ user: $(USER_PENDING) \
     configure-shell \
     configure-vscode
 	/usr/bin/kbuildsycoca6
+	@systemctl --user restart plasma-plasmashell.service
+	@echo ">>> plasmashell restarted — system tray indicators (keyboard layout, volume, etc.) will auto-populate"
 	@[ -z "$(GPU_BDF)" ] || echo ">>> GPU $(GPU_BDF) PCIe link: $$(cat /sys/bus/pci/devices/$(GPU_BDF)/current_link_speed) x$$(cat /sys/bus/pci/devices/$(GPU_BDF)/current_link_width) (want 8.0 GT/s x4; 2.5 GT/s = reseat/swap cable)"
