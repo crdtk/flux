@@ -16,12 +16,10 @@ COMPUTE += \
 
 CUDA_PKG ?= cuda-toolkit
 $(NVCC): | $(CUDA_LIST)
-	@[ -n "$(IS_ROOT)" ] || { echo ">>> CUDA install requires root. Run: sudo make"; exit 1; }
 	$(APT) update
 	$(APT) install -y $(CUDA_PKG)
 
 $(CUDA_LIST): $(CUDA_KEYRING_DEB)
-	@[ -n "$(IS_ROOT)" ] || { echo ">>> CUDA repo setup requires root. Run: sudo make"; exit 1; }
 	$(APT) install -y $<
 
 $(CUDA_KEYRING_DEB): | $(DOWNLOADS_DIR)
