@@ -14,6 +14,7 @@ ifeq ($(shell id -u),0)
 	rm -f $(CUDA_KEYRING_DEB) /etc/apt/sources.list.d/cuda-ubuntu*-x86_64.list
 	rm -f /etc/apt/preferences.d/no-snapd
 	rm -f /etc/systemd/system/packagekit.service
+	rm -f /etc/ddclient.conf
 else
 	rm -rf $(USER_HOME)/.cache/thumbnails/fail/
 	rm -f $(USER_HOME)/.config/autostart/albert.desktop
