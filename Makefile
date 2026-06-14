@@ -2,40 +2,37 @@
 # Ubuntu Setup
 # ==========================================================
 #
-# DESIGN PRINCIPLES — follow these when extending this file:
+# DESIGN PRINCIPLES — a constitution, foundational → mechanical. Follow when extending.
 #
-# NAMING
-# 1.  Names declare why, not what.
-# 2.  Two install paths, one truth — idempotency makes both safe.
-# 3.  Grow by addition, not modification.
-# 9.  Top-down: variables before use, dependents before prerequisites.
-# 13. Single-use variables inline. Paths derive from parent variables.
-#
-# TARGETS
-# 4.  Gate hardware at parse time. Named capability variables, no magic numbers.
-# 5.  Targets are real files — no sentinels, no .PHONY for real outcomes.
-# 6.  Bootstrapper dependencies are order-only — auto-updates must not rebuild.
-# 10. .PHONY opens its section.
-# 11. Outermost targets only — intermediates cascade.
-# 15. Audit dead code. Shadowed rules and pre-built targets waste lines.
-# 16. Order-only (|) voids $<. Reference paths explicitly in the recipe.
-# 17. Multi-line content in define…endef. Emit with $(file >$@,$(VAR)).
-# 18. Target the decision, not the payload — config enables the feature.
-# 19. Any apt-file-mappable path earns a pattern rule, not an explicit recipe.
-# 20. The cheapest target is the file the action creates anyway.
-#
-# PRIVILEGE
-# 7.  Provisioning scope only — targets that change no state do not belong.
-# 8.  One clean, privilege-branched. No sudo in recipes.
-# 12. Name every shell subexpression. $$(…) not tied to $@ belongs above.
-# 14. One privilege gate: IS_ROOT, computed once at parse time.
-# 23. Packages via INSTALL gates only. Add to group, sudo make, done.
-# 25. Prefer user-space installs. Escalate to root only when the path requires it.
-#
-# AUTOMATION
-# 21. No nested $(MAKE). Protocol: make clean && make.
-# 22. Automate, do not ask. Every manual step is a defect.
-# 24. Stage across runs. make && make beats $(eval) every time.
+# I.    IDEMPOTENCY & STAGING. Re-runs converge to one truth; the protocol is
+#       `make clean && make`. Bootstrap deps are order-only so auto-updates never
+#       rebuild; multi-phase work stages across runs.
+# II.   DECIDE AT PARSE TIME. Sense capability into named variables — no magic
+#       numbers. Gate the decision, not the payload. What the makefile installs is
+#       the source of truth — derive config from it, never re-sense runtime.
+# III.  RESILIENCE & AUTOMATION. Automate every step (a manual step is a defect).
+#       Never exit — sense, act, warn, continue. If the recipe copes with absence,
+#       don't also gate it.
+# IV.   TARGETS ARE THE REAL FILE. Make the target the file the action creates. For
+#       a transient action with no file (pinhole, mount, auth, in-place edit), use a
+#       NON-phony, fileless target that re-runs — not .PHONY, which a pattern rule
+#       skips. Reserve explicit .PHONY for named aggregate actions; sentinels last.
+# V.    MAP, DON'T ENUMERATE. An apt-file-mappable path earns a `%` pattern rule, not
+#       an explicit recipe. A per-item action is $(foreach) building the target list
+#       + one `%` rule — never $(eval) or a shell `for`.
+# VI.   DEPENDENCY SHAPE. Expose only outermost targets; intermediates cascade.
+#       Order-only (|) voids $< — reference paths explicitly.
+# VII.  PRIVILEGE. One IS_ROOT gate at parse time; no sudo inside recipes (branch
+#       instead). Prefer user-space, escalate only when the path demands it. Packages
+#       enter only through INSTALL gates. Provisioning scope only — no stateless targets.
+# VIII. VARIABLE LOCALITY. Define each variable just above and before its first use;
+#       name every shell subexpression; inline single-use values, derive paths from
+#       parents. A := accumulator expands += immediately, so a derived append follows
+#       its inputs, in a later-parsed include.
+# IX.   CONTENT & LAYOUT. Multi-line content lives in define…endef, emitted with
+#       $(file >$@,$(VAR)). .PHONY opens its section.
+# X.    HYGIENE. Names declare why, not what; grow by addition, not modification;
+#       audit dead code — shadowed and pre-built rules waste lines.
 #
 # ==========================================================
 
