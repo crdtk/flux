@@ -15,8 +15,9 @@ endif
 
 $(CLAUDE_BIN):
 	mkdir -p $(dir $@)
-	@command -v npm >/dev/null 2>&1 || { echo ">>> npm not found — run: sudo make first"; exit 1; }
-	npm install --prefix $(USER_HOME)/.local -g @anthropic-ai/claude-code
+	@command -v npm >/dev/null 2>&1 \
+	  && npm install --prefix $(USER_HOME)/.local -g @anthropic-ai/claude-code \
+	  || echo ">>> WARNING: npm not found — skipping claude (sudo make installs npm; make again picks it up)"
 
 $(USER_HOME)/.ssh/authorized_keys: $(SSH_KEY)
 	cat $(SSH_KEY).pub >> $@
