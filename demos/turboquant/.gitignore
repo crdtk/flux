@@ -1,7 +1,0 @@
-.venv/
-.sentinel/
-__pycache__/
-*.pyc
-*.pyo
-*.egg-info/
-bench_results.json

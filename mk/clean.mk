@@ -10,6 +10,7 @@ define REMOVE_PANELS_JS
 endef
 clean:
 ifeq ($(shell id -u),0)
+	rm -rf $(USER_HOME)/Desktop/Projects/Crucible/.venv
 	rm -rf $(USER_HOME)/Desktop/Projects/Crucible/demos/LLMs-from-scratch/venv
 	rm -f /usr/share/applications/google-chrome.desktop /usr/share/applications/code.desktop /usr/share/applications/pycharm-community.desktop
 	rm -f $(CUDA_KEYRING_DEB) /etc/apt/sources.list.d/cuda-ubuntu*-x86_64.list

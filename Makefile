@@ -4,35 +4,49 @@
 #
 # DESIGN PRINCIPLES — a constitution, foundational → mechanical. Follow when extending.
 #
-# I.    IDEMPOTENCY & STAGING. Re-runs converge to one truth; the protocol is
+# I.    REAL CONSEQUENCES. Every recipe must produce a real, measurable consequence
+#       — a file written, a setting applied, a port open, any state that can be
+#       independently verified. A file is the form Make tracks natively (see V). For
+#       non-file outcomes, sense the condition into a gated variable at parse time
+#       (see III), then act on it in a dot-prefixed non-phony target inserted into
+#       the system: or user: flow. A sentinel is a show of ignorance, not a
+#       workaround: if you cannot name the outcome, you do not understand the action.
+#       An action without a traceable execution consequence is madness.
+# II.   IDEMPOTENCY & STAGING. Re-runs converge to one truth; the protocol is
 #       `make clean && make`. Bootstrap deps are order-only so auto-updates never
 #       rebuild; multi-phase work stages across runs.
-# II.   DECIDE AT PARSE TIME. Sense capability into named variables — no magic
+# III.  DECIDE AT PARSE TIME. Sense capability into named variables — no magic
 #       numbers. Gate the decision, not the payload. What the makefile installs is
 #       the source of truth — derive config from it, never re-sense runtime.
-# III.  RESILIENCE & AUTOMATION. Automate every step (a manual step is a defect).
+# IV.   RESILIENCE & AUTOMATION. Automate every step (a manual step is a defect).
 #       Never exit — sense, act, warn, continue. If the recipe copes with absence,
 #       don't also gate it.
-# IV.   TARGETS ARE THE REAL FILE. Make the target the file the action creates. For
-#       a transient action with no file (pinhole, mount, auth, in-place edit), use a
-#       NON-phony, fileless target that re-runs — not .PHONY, which a pattern rule
-#       skips. Reserve explicit .PHONY for named aggregate actions; sentinels last.
-# V.    MAP, DON'T ENUMERATE. An apt-file-mappable path earns a `%` pattern rule, not
+# V.    TARGETS ARE THE REAL FILE. Make the target the file the action creates. For
+#       non-file outcomes (service running, config applied, port open), sense the
+#       condition into a gated variable (see III) and use a dot-prefixed non-phony
+#       target — dot targets are fileless so Make always re-evaluates them, the gate
+#       makes them a no-op when the condition is already met. Reserve explicit .PHONY
+#       for named aggregate actions (system, user, clean).
+# VI.   MAP, DON'T ENUMERATE. An apt-file-mappable path earns a `%` pattern rule, not
 #       an explicit recipe. A per-item action is $(foreach) building the target list
 #       + one `%` rule — never $(eval) or a shell `for`.
-# VI.   DEPENDENCY SHAPE. Expose only outermost targets; intermediates cascade.
+# VII.  DEPENDENCY SHAPE. Expose only outermost targets; intermediates cascade.
 #       Order-only (|) voids $< — reference paths explicitly.
-# VII.  PRIVILEGE. One IS_ROOT gate at parse time; no sudo inside recipes (branch
+# VIII. PRIVILEGE. One IS_ROOT gate at parse time; no sudo inside recipes (branch
 #       instead). Prefer user-space, escalate only when the path demands it. Packages
 #       enter only through INSTALL gates. Provisioning scope only — no stateless targets.
-# VIII. VARIABLE LOCALITY. Define each variable just above and before its first use;
+# IX.   VARIABLE LOCALITY. Define each variable just above and before its first use;
 #       name every shell subexpression; inline single-use values, derive paths from
 #       parents. A := accumulator expands += immediately, so a derived append follows
 #       its inputs, in a later-parsed include.
-# IX.   CONTENT & LAYOUT. Multi-line content lives in define…endef, emitted with
+# X.    CONTENT & LAYOUT. Multi-line content lives in define…endef, emitted with
 #       $(file >$@,$(VAR)). .PHONY opens its section.
-# X.    HYGIENE. Names declare why, not what; grow by addition, not modification;
+# XI.   HYGIENE. Names declare why, not what; grow by addition, not modification;
 #       audit dead code — shadowed and pre-built rules waste lines.
+# XII.  RIGHT TOOL. Use CLI specialists over general-purpose interpreters for
+#       single operations: jq for JSON, xmllint for XML, awk/sed for text.
+#       Spawning python3 for a jq-expressible operation is an avoidable
+#       dependency and a readability cost.
 #
 # ==========================================================
 
@@ -108,3 +122,45 @@ $(DOWNLOADS_DIR)/%: | $(DOWNLOADS_DIR)
 
 $(DOWNLOADS_DIR):
 	mkdir -p $@
+
+COLAB_REMOTE       ?= gdrive
+COLAB_DIR          ?= Colab Notebooks
+COLAB_NB           := demos/prefix-caching/prefix_caching_demo.ipynb
+RCLONE_CONF        := $(USER_HOME)/.config/rclone/rclone.conf
+
+UV       := $(USER_HOME)/.local/bin/uv
+VENV     := $(CURDIR)/.venv
+VENV_PY  := $(VENV)/bin/python3
+VENV_PIP  = VIRTUAL_ENV=$(VENV) $(UV) pip install
+
+TQ_KERNEL := $(USER_HOME)/.local/share/jupyter/kernels/turboquant/kernel.json
+
+$(VENV_PY): | $(UV)
+	$(UV) venv $(VENV) --python 3.12
+	@echo ">>> venv at $(VENV) (python 3.12)"
+
+$(TQ_KERNEL): $(VENV_PY)
+	$(VENV_PIP) ipykernel jupyter
+	$(VENV_PY) -m ipykernel install --user --name turboquant --display-name "TurboQuant"
+	@echo ">>> TurboQuant kernel ready"
+
+.PHONY: demo-notebook
+demo-notebook: | $(TQ_KERNEL)
+	cd demos/prefix-caching && $(VENV)/bin/jupyter notebook prefix_caching_demo.ipynb
+
+.PHONY: demo-clean
+demo-clean:
+	rm -rf $(USER_HOME)/.local/share/jupyter/kernels/turboquant
+
+$(RCLONE_CONF): | /usr/bin/rclone
+	rclone config create $(COLAB_REMOTE) drive scope=drive
+	rclone lsd $(COLAB_REMOTE):
+	@echo ">>> rclone Google Drive remote '$(COLAB_REMOTE)' configured"
+
+.PHONY: colab-upload
+colab-upload: $(COLAB_NB) | $(RCLONE_CONF)
+	rclone copy $(COLAB_NB) "$(COLAB_REMOTE):$(COLAB_DIR)/"
+	@FILE_ID=$$(rclone lsjson "$(COLAB_REMOTE):$(COLAB_DIR)/" | \
+	    jq -r '.[] | select(.Name == "$(notdir $(COLAB_NB))") | .ID'); \
+	    xdg-open "https://colab.research.google.com/drive/$$FILE_ID"; \
+	    echo ">>> https://colab.research.google.com/drive/$$FILE_ID"
