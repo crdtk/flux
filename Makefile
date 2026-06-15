@@ -123,10 +123,9 @@ $(DOWNLOADS_DIR)/%: | $(DOWNLOADS_DIR)
 $(DOWNLOADS_DIR):
 	mkdir -p $@
 
-COLAB_REMOTE       ?= gdrive
-COLAB_DIR          ?= Colab Notebooks
-COLAB_NB           := demos/prefix-caching/prefix_caching_demo.ipynb
-RCLONE_CONF        := $(USER_HOME)/.config/rclone/rclone.conf
+COLAB_NB     := demos/prefix-caching/prefix_caching_demo.ipynb
+GITHUB_REPO  := crdtk/flux
+COLAB_BRANCH := main
 
 UV       := $(USER_HOME)/.local/bin/uv
 VENV     := $(CURDIR)/.venv
@@ -152,15 +151,8 @@ demo-notebook: | $(TQ_KERNEL)
 demo-clean:
 	rm -rf $(USER_HOME)/.local/share/jupyter/kernels/turboquant
 
-$(RCLONE_CONF): | /usr/bin/rclone
-	rclone config create $(COLAB_REMOTE) drive scope=drive
-	rclone lsd $(COLAB_REMOTE):
-	@echo ">>> rclone Google Drive remote '$(COLAB_REMOTE)' configured"
-
 .PHONY: colab-upload
-colab-upload: $(COLAB_NB) | $(RCLONE_CONF)
-	rclone copy $(COLAB_NB) "$(COLAB_REMOTE):$(COLAB_DIR)/"
-	@FILE_ID=$$(rclone lsjson "$(COLAB_REMOTE):$(COLAB_DIR)/" | \
-	    jq -r '.[] | select(.Name == "$(notdir $(COLAB_NB))") | .ID'); \
-	    xdg-open "https://colab.research.google.com/drive/$$FILE_ID"; \
-	    echo ">>> https://colab.research.google.com/drive/$$FILE_ID"
+colab-upload: $(COLAB_NB)
+	git push origin $(COLAB_BRANCH)
+	xdg-open "https://colab.research.google.com/github/$(GITHUB_REPO)/blob/$(COLAB_BRANCH)/$(COLAB_NB)"
+	@echo ">>> https://colab.research.google.com/github/$(GITHUB_REPO)/blob/$(COLAB_BRANCH)/$(COLAB_NB)"
