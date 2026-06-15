@@ -1,6 +1,39 @@
-# Crucible
+# The Cost of Luxembourg: Automated EU Data Sovereignty for Distributed Systems
 
-> Many planning cycles later, facing a €1.2 billion fine, the board would remember the afternoon someone put the right to erasure on the product backlog.
+> "Many data transfers later, facing a €1.2 billion fine from Ireland's Data Protection Commission, Meta's leadership would remember the decade when someone decided that EU user data and American servers were an infrastructure detail, not a regulatory question..."
+
+## The Architecture of a Fine
+
+The 2023 ruling by the European Data Protection Board (EDPB) wasn't just a legal milestone; it was a structural indictment of modern cloud architecture. For two decades, engineering organizations built distributed systems under a simple assumption: network latency matters, but geographic borders do not. 
+
+When user data flows seamlessly from a frontend client to an AWS cluster in `us-east-1`, it is a marvel of modern infrastructure. It is also, as courts in Luxembourg have repeatedly ruled, a potential compliance failure.
+
+Standard Contractual Clauses (SCCs) are no longer a blanket shield. If your application handles European Union citizens' personal data (PII) and cross-border replication happens silently at the database layer, you aren't just taking on technical debt—you are taking on sovereign liability.
+
+**[Project Name]** was built to turn regulatory constraints into structural invariants. It treats data sovereignty not as an afterthought handled by legal teams via annual audits, but as a hard engineering primitive.
+
+---
+
+## The Core Invariant: Geometry Over Topology
+
+Most compliance tools operate at the application layer, using post-hoc logging, auditing, or reactive database queries to flag violations after the data has already crossed an ocean. 
+
+This project operates at the routing and storage layer, enforcing **Geographic Data Invariants**. By intercepting data flows before serialization, it guarantees that:
+
+* **Strict Regional Isolation:** EU user payloads are mathematically restricted from entering non-compliant regions without explicit, cryptographic consent tokens.
+* **Zero-Knowledge Cross-Border Sync:** While global metadata can be synchronized for global availability, actual user identities are tokenized and decoupled at the boundary.
+* **Deterministic Sovereignty Routing:** Built-in middleware for Next.js, Go, and FastAPI that dynamically routes requests based on real-time geolocation and sovereign headers.
+
+---
+
+## Quick Start: Drawing the Borders
+
+Add the compliance proxy to your existing cluster configuration to enforce physical boundaries on your network traffic.
+
+### 1. Install the Middleware
+```bash
+pip install sovereignty-core
+```
 
 Local LLM inference platform for validating EU-regulated workloads before cloud spend. Primary use case: content moderation at fashion e-commerce scale — 22M+ moderation events/year, where GDPR Article 17 (right to erasure) and DSA Article 17 (audit logging) are architectural constraints that shape inference cost, not legal afterthoughts. Hardware target: 4× RTX PRO 6000 Blackwell Max-Q (96 GB GDDR7 each, 384 GB total) through a PEX88048 PCIe switch, targeting Qwen3.5-397B-A17B at 120–150 tok/s under 1.5 kW. Built on the only DDR4 SODIMM board in the multi-GPU niche — reusing existing memory during the 2026 RAM crisis. GPUs deferred; PCIe switch under bench validation.
 
