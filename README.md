@@ -1,45 +1,29 @@
-# The Cost of Luxembourg: Automated EU Data Sovereignty for Distributed Systems
+# The Memory Hole: Sovereign Cache Planning for LLMs at Scale
 
-> "Many data transfers later, facing a €1.2 billion fine from Ireland's Data Protection Commission, Meta's leadership would remember the decade when someone decided that EU user data and American servers were an infrastructure detail, not a regulatory question..."
+> "Many sprints later, facing a €1.2 billion fine, the engineers would remember that afternoon when someone decided the right to erasure was a product concern, not a property of the cache."
 
 ## The Architecture of a Fine
 
-The 2023 ruling by the European Data Protection Board (EDPB) wasn't just a legal milestone; it was a structural indictment of modern cloud architecture. For two decades, engineering organizations built distributed systems under a simple assumption: network latency matters, but geographic borders do not. 
+Every Large Language Model request arrives twice: once as computation, once as memory. 
 
-When user data flows seamlessly from a frontend client to an AWS cluster in `us-east-1`, it is a marvel of modern infrastructure. It is also, as courts in Luxembourg have repeatedly ruled, a potential compliance failure.
+In high-throughput inference engines like vLLM, **Prefix Caching** hashes incoming context in blocks of 16 tokens, chaining each block cryptographically to the previous one. If a hash matches on a subsequent request, the system skips the expensive $O(n^2)$ prefill phase and jumps straight to token generation. The cache remembers. 
 
-Standard Contractual Clauses (SCCs) are no longer a blanket shield. If your application handles European Union citizens' personal data (PII) and cross-border replication happens silently at the database layer, you aren't just taking on technical debt—you are taking on sovereign liability.
+But modern platforms do not operate in a legal vacuum. The European Union's General Data Protection Regulation (GDPR) demands that systems forget, granting users the absolute right to erasure. 
 
-**[Project Name]** was built to turn regulatory constraints into structural invariants. It treats data sovereignty not as an afterthought handled by legal teams via annual audits, but as a hard engineering primitive.
-
----
-
-## The Core Invariant: Geometry Over Topology
-
-Most compliance tools operate at the application layer, using post-hoc logging, auditing, or reactive database queries to flag violations after the data has already crossed an ocean. 
-
-This project operates at the routing and storage layer, enforcing **Geographic Data Invariants**. By intercepting data flows before serialization, it guarantees that:
-
-* **Strict Regional Isolation:** EU user payloads are mathematically restricted from entering non-compliant regions without explicit, cryptographic consent tokens.
-* **Zero-Knowledge Cross-Border Sync:** While global metadata can be synchronized for global availability, actual user identities are tokenized and decoupled at the boundary.
-* **Deterministic Sovereignty Routing:** Built-in middleware for Next.js, Go, and FastAPI that dynamically routes requests based on real-time geolocation and sovereign headers.
+When these two realities collide in a production cluster—where user data is baked into cached KV pairs to optimize inference latency—compliance ceases to be a product feature. It becomes a hard engineering invariant at the storage layer. Failure to decouple stable policy from mutable personal data does not just degrade performance; it creates a structural liability that compounds until it surfaces in a regulatory audit.
 
 ---
 
-## Quick Start: Drawing the Borders
+## The Scale of the Constraint
 
-Add the compliance proxy to your existing cluster configuration to enforce physical boundaries on your network traffic.
+Consider a fashion retail platform processing **22,300,000 fit-feedback comments per year**. Each free-text submission carries three simultaneous legal obligations under continental law:
 
-### 1. Install the Middleware
-```bash
-pip install sovereignty-core
-```
+1. **Content Moderation:** Handled under Digital Services Act (DSA) Article 17 using a persistent corporate policy.
+2. **Right to Erasure:** Handled under GDPR Article 17, allowing any reviewer to delete their historical comment at will.
+3. **Traceability:** Ensuring every automated moderation decision remains tied to a unique session token for compliance audits.
 
-Local LLM inference platform for validating EU-regulated workloads before cloud spend. Primary use case: content moderation at fashion e-commerce scale — 22M+ moderation events/year, where GDPR Article 17 (right to erasure) and DSA Article 17 (audit logging) are architectural constraints that shape inference cost, not legal afterthoughts. Hardware target: 4× RTX PRO 6000 Blackwell Max-Q (96 GB GDDR7 each, 384 GB total) through a PEX88048 PCIe switch, targeting Qwen3.5-397B-A17B at 120–150 tok/s under 1.5 kW. Built on the only DDR4 SODIMM board in the multi-GPU niche — reusing existing memory during the 2026 RAM crisis. GPUs deferred; PCIe switch under bench validation.
+To support this volume without collapsing under the weight of $O(n^2)$ prefill compute costs, the context must be stratified. The order of tokens determines whether your system runs at near-zero marginal cost or hemorrhages money on redundant GPU cycles.
 
----
-
-## Prefix caching for EU-regulated content moderation
 
 [`demos/prefix-caching/prefix_caching_demo.ipynb`](demos/prefix-caching/prefix_caching_demo.ipynb)
 
