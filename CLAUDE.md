@@ -51,7 +51,8 @@ All cooling decisions must prioritize quiet operation:
 - **RAM**: 2x Samsung M471A2K43BB1-CPB — 16GB DDR4-2133 SODIMM, non-ECC, unbuffered, dual-rank, 1.2V = 32GB (2 of the original 4 SODIMMs; the other 2 remain in ServalWS)
 - **Motherboard**: ASRock Rack E3C256D4I-2T (ordered 2026-04-07)
 - **CPU**: Intel Xeon E-2314 (4C/4T, LGA1200, 20 PCIe 4.0 lanes)
-- **GPU target**: 4x NVIDIA RTX PRO 6000 Blackwell Max-Q (96GB GDDR7, 1.8 TB/s, 300W, blower)
+- **GPU (active, bench)**: NVIDIA RTX A4000 (16GB GDDR6, 140W) — current development GPU, behind PLX PEX 8749 bench switch; link training at Gen1 x4, reseating in progress
+- **GPU (target, not purchased)**: 4x NVIDIA RTX PRO 6000 Blackwell Max-Q (96GB GDDR7, 1.8 TB/s, 300W, blower) — deferred until PCIe switch path is validated
 - **PCIe Slot (PCIE7)**: Currently staging WD_BLACK SN8100 in ICY DOCK MB111VP-B (Reserved for PEX88048 Switch)
 - **OCuLink Ports**: Target home for WD_BLACK storage via Tekram TK-2U11 + MB705M2P-B M.2→U.2 converter
 - **Storage (Boot)**: Samsung 9100 PRO 8TB (Serial: S7YHNJ0YC07013D)

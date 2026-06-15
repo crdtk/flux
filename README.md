@@ -44,7 +44,8 @@ make user          # user-space setup (no sudo)
 | Motherboard | ASRock Rack E3C256D4I-2T (4x SODIMM, PCIe 4.0 x16 bifurcation) |
 | CPU | Intel Xeon E-2314 (LGA1200, 20 PCIe 4.0 lanes) |
 | RAM | 2x Samsung M471A2K43BB1-CPB — 32 GB DDR4-2133 SODIMM |
-| GPU | 4x NVIDIA RTX PRO 6000 Blackwell Max-Q (96 GB GDDR7, 300 W, blower) — target, not yet purchased |
+| GPU (active) | NVIDIA RTX A4000 (16 GB GDDR6, 140 W) — current development GPU |
+| GPU (target) | 4x NVIDIA RTX PRO 6000 Blackwell Max-Q (96 GB GDDR7, 300 W) — not yet purchased; deferred until PCIe switch path validated |
 | PCIe switch | PEX88048 via HighPoint Rocket 1528D — target; bench-testing with PLX PEX 8749 (Gen3 substitute), link currently training at Gen1 x4 (reseating GPU + backplane cabling in progress) |
 | Storage (boot) | Samsung 9100 PRO 8 TB (M.2) |
 | Storage (models) | WD_BLACK SN8100 8 TB (OCuLink via Tekram TK-2U11) |
