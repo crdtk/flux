@@ -1,16 +1,27 @@
 # The Memory Hole: Sovereign Cache Planning for LLMs at Scale
 
-> "Many sprints later, facing a €1.2 billion fine, the engineers would remember that afternoon when someone decided the right to erasure was a product concern, not a property of the cache."
+> "The notification arrived from Dublin on a Tuesday. The figure on the page was €1.2 billion—a sum that successfully downgraded a decade of cross-border infrastructure planning to a rather expensive misunderstanding..."
 
-## The Architecture of a Fine
+## The Anatomy of an Outage (Legal, Not Technical)
 
-Every Large Language Model request arrives twice: once as computation, once as memory. 
+The infrastructure worked perfectly. Every load balancer from California to Frankfurt was operating within nominal parameters. Latency was low, throughput was at an all-time high, and replication across the Atlantic was happening continuously, automatically, and silently. 
 
-In high-throughput inference engines like vLLM, **Prefix Caching** hashes incoming context in blocks of 16 tokens, chaining each block cryptographically to the previous one. If a hash matches on a subsequent request, the system skips the expensive $O(n^2)$ prefill phase and jumps straight to token generation. The cache remembers. 
+That was the exact problem. 
 
-But modern platforms do not operate in a legal vacuum. The European Union's General Data Protection Regulation (GDPR) demands that systems forget, granting users the absolute right to erasure. 
+The Irish Data Protection Commission’s 2023 ruling against Meta proved a paradox: a perfectly optimized global network is, under current EU law, a beautifully engineered liability. While engineering teams were optimizing for millisecond replication across global availability zones, they were unwittingly constructing a pipeline that treated sovereign borders with a level of indifference usually reserved for routine system maintenance.
 
-When these two realities collide in a production cluster—where user data is baked into cached KV pairs to optimize inference latency—compliance ceases to be a product feature. It becomes a hard engineering invariant at the storage layer. Failure to decouple stable policy from mutable personal data does not just degrade performance; it creates a structural liability that compounds until it surfaces in a regulatory audit.
+Standard Contractual Clauses (SCCs) and corporate privacy frameworks held up perfectly—right until a court in Luxembourg decided to read the statute.
+
+### From Network Packets to Token Hashing
+
+Many sprints later, facing their own architecture review, a different team of engineers would remember that Tuesday. They would realize that the legal chasm between European data rights and American compute didn't just apply to trans-Atlantic database replication. It applied directly to the memory arrays of their own Large Language Models.
+
+They had treated the right to erasure as a downstream product concern, handled by a database script. They did not realize it was actually a mathematical property of their inference cache.
+
+This notebook demonstrates **prefix caching** in vLLM applied to a real-world fit-feedback moderation workload. It exposes the hidden compliance liabilities of stateful LLM inference under Digital Services Act (DSA) content moderation obligations and General Data Protection Regulation (GDPR) deletion requirements.
+
+* **Runtime:** T4 GPU (Free Google Colab tier is sufficient)
+* **Model:** `Qwen/Qwen2.5-7B-Instruct-AWQ` (~4 GB, optimized for T4)
 
 ---
 
