@@ -1,9 +1,21 @@
-include mk/system/albert.mk
-include mk/system/apps.mk
+KUBUNTU_BACKPORTS_LIST := /etc/apt/sources.list.d/kubuntu-ppa-ubuntu-backports-$(UBUNTU_CODENAME).sources
+
+$(KUBUNTU_BACKPORTS_LIST):
+	add-apt-repository -y ppa:kubuntu-ppa/backports
+
+/usr/share/applications/%.desktop:
+	test -f $@ || $(APT) install -y --reinstall $(DESKTOP_PKG_$*)
+	sed -i 's|^\(Exec=[^ ]*\)|\1 $(DESKTOP_FLAGS_$*)|g' $@
+
+include mk/system/audiovideo/audiovideo.mk
+include mk/system/development/development.mk
+include mk/system/graphics/graphics.mk
+include mk/system/network/network.mk
+include mk/system/settings/settings.mk
+include mk/system/utility/utility.mk
 include mk/system/compute.mk
 include mk/system/hardening.mk
 include mk/system/management.mk
-include mk/system/pycharm.mk
 include mk/system/storage.mk
 include mk/system/upnpc.mk
 

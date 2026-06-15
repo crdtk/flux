@@ -1,10 +1,6 @@
-#include mk/user/albert.mk
-include mk/user/shell.mk
-include mk/user/demos.mk
-include mk/user/panels/panels.mk
-include mk/user/plasmoids.mk
-include mk/user/references.mk
-include mk/user/vscode.mk
+include mk/user/utility/utility.mk
+include mk/user/development/development.mk
+include mk/user/settings/settings.mk
 
 USER_PENDING := $(filter-out $(wildcard $(USER_FILES)),$(USER_FILES))
 

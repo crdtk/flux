@@ -1,4 +1,3 @@
-CLAUDE_BIN          := $(USER_HOME)/.local/bin/claude
 SSH_KEY             := $(USER_HOME)/.ssh/id_ed25519
 SSH_CONFIG          := $(USER_HOME)/.ssh/config
 BASHRC              := $(USER_HOME)/.bashrc
@@ -13,7 +12,7 @@ Host crucible
 	ServerAliveInterval 60
 endef
 
-USER_FILES += $(CLAUDE_BIN) $(USER_HOME)/.ssh/authorized_keys $(SSH_CONFIG)
+USER_FILES += $(USER_HOME)/.ssh/authorized_keys $(SSH_CONFIG)
 
 .PHONY: configure-shell
 configure-shell:
@@ -21,12 +20,6 @@ ifeq ($(MAKE_COMPLETION_OK),0)
 	echo 'source $(MAKE_COMPLETION)' >> $(BASHRC)
 	@echo ">>> Make autocomplete enabled"
 endif
-
-$(CLAUDE_BIN):
-	mkdir -p $(dir $@)
-	@command -v npm >/dev/null 2>&1 \
-	  && npm install --prefix $(USER_HOME)/.local -g @anthropic-ai/claude-code \
-	  || echo ">>> WARNING: npm not found — skipping claude (sudo make installs npm; make again picks it up)"
 
 $(USER_HOME)/.ssh/authorized_keys: $(SSH_KEY)
 	cat $(SSH_KEY).pub >> $@
@@ -42,4 +35,3 @@ $(SSH_CONFIG): $(SSH_KEY)
 	$(file >$@,$(SSH_CONFIG_CONTENT))
 	chmod 600 $@
 	@echo ">>> $@"
-

@@ -1,4 +1,4 @@
-include mk/user/panels/plasmashell.mk
+include mk/user/settings/panels/plasmashell.mk
 
 ## Bottom panel: app launcher + launchpad + task manager.
 ## All layout properties set via JS — no kwriteconfig6 Panel-ID lookups needed.
