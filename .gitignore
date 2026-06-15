@@ -12,6 +12,11 @@ References/**/*.pdf
 .sentinel/
 .playwright-mcp/
 
+# Kaggle — generated at runtime
+demos/prefix-caching/kernel-metadata.json
+demos/prefix-caching/.kaggle-kernel
+demos/prefix-caching/output/
+
 # IDE
 .idea/
 
