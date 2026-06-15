@@ -1,21 +1,28 @@
 # Crucible
 
-Local LLM inference rig for the 2026 RAM crisis. Planned: four RTX PRO 6000 Blackwell Max-Q GPUs (96 GB GDDR7 each, 384 GB total) through a PEX88048 PCIe switch, on a Mini-ITX board with DDR4 SODIMMs — the only board in this niche. Target: Qwen3.5-397B-A17B at 120–150 tok/s in a Berlin apartment under 1.5 kW. GPUs not yet purchased; PCIe switch path under bench validation.
+> Many planning cycles later, facing a €1.2 billion fine, the board would remember the afternoon someone put the right to erasure on the product backlog.
+
+Local LLM inference platform for validating EU-regulated workloads before cloud spend. Primary use case: content moderation at fashion e-commerce scale — 22M+ moderation events/year, where GDPR Article 17 (right to erasure) and DSA Article 17 (audit logging) are architectural constraints that shape inference cost, not legal afterthoughts. Hardware target: 4× RTX PRO 6000 Blackwell Max-Q (96 GB GDDR7 each, 384 GB total) through a PEX88048 PCIe switch, targeting Qwen3.5-397B-A17B at 120–150 tok/s under 1.5 kW. Built on the only DDR4 SODIMM board in the multi-GPU niche — reusing existing memory during the 2026 RAM crisis. GPUs deferred; PCIe switch under bench validation.
 
 ---
 
-## Prefix caching demo
+## Prefix caching for EU-regulated content moderation
 
 [`demos/prefix-caching/prefix_caching_demo.ipynb`](demos/prefix-caching/prefix_caching_demo.ipynb)
 
-Runs on Colab free tier (T4). Shows how vLLM's block-hash prefix caching eliminates prefill for shared context, why review order and dynamic-content placement determine cache hit rate, and what INT4 KV quantization buys in terms of context capacity.
+Models vLLM prefix caching architecture for a content moderation platform serving a 100K-SKU fashion catalog. Runs on Colab or Kaggle (T4). What each experiment measures:
+
+- **Prefix hierarchy**: three-layer block-hash chain — DSA policy prefix (stable, always a cache hit) → per-SKU review corpus (stable until GDPR erasure) → session audit token + comment (always cold). Token placement order is the architectural decision; the notebook quantifies the consequence of getting it wrong.
+- **GDPR Art. 17 erasure cost**: removing a reviewer's data invalidates the cached prefix for all co-reviewers of that SKU. At 0.1% monthly erasure rate across 100K SKUs, models the GPU re-warm cost and projects annual infrastructure impact.
+- **DSA Art. 17 audit token placement**: session token placed before vs. after the review corpus. Wrong placement eliminates all prefix cache hits. Computes annual GPU-hours wasted at platform scale.
+- **Catalog-scale cache planning**: INT4 KV bytes per SKU prefix, hot-tier VRAM capacity on T4 vs. target hardware, Zipf-distributed traffic model (20% of SKUs absorb 80% of requests).
+- **KV quantization**: INT4 breakeven — VRAM recovered vs. precision cost at 100K-SKU scale.
 
 ```bash
 make colab-upload    # push + open in Colab
-make demo-notebook   # open locally in Jupyter
+make kaggle-run      # push to Kaggle, poll, download output
+make demo-notebook   # run locally in Jupyter
 ```
-
-The notebook is self-contained: first run installs vllm and restarts the kernel; second Run All executes all cells.
 
 ---
 
