@@ -1,7 +1,10 @@
 UV       := $(USER_HOME)/.local/bin/uv
 LLMS_VENV := demos/LLMs-from-scratch/venv
 
-USER_FILES += $(UV) $(LLMS_VENV)/bin/jupyter $(USER_HOME)/.local/bin/kaggle
+# The LLMs-from-scratch venv is gated on its repo being cloned — without
+# requirements.txt there's nothing to build, so skip it rather than halt the run (III).
+USER_FILES += $(UV) $(USER_HOME)/.local/bin/kaggle \
+              $(if $(wildcard demos/LLMs-from-scratch/requirements.txt),$(LLMS_VENV)/bin/jupyter)
 
 $(UV):
 	curl -LsSf https://astral.sh/uv/install.sh | sh
