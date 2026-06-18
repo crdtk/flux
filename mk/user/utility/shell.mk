@@ -12,7 +12,20 @@ Host crucible
 	ServerAliveInterval 60
 endef
 
-USER_FILES += $(USER_HOME)/.ssh/authorized_keys $(SSH_CONFIG)
+USER_FILES += $(USER_HOME)/.ssh/authorized_keys $(SSH_CONFIG) $(USER_HOME)/.config/kwalletrc
+
+# Disable KWallet so nothing ever prompts for a wallet password. On an autologin box
+# pam_kwallet can't derive an unlock key (no login password is typed), so disabling is
+# the only way to never be asked. ~/.config always exists, so no dir prereq needed.
+define KWALLETRC
+[Wallet]
+Enabled=false
+First Use=false
+endef
+
+$(USER_HOME)/.config/kwalletrc:
+	$(file >$@,$(KWALLETRC))
+	@echo ">>> KWallet disabled — no wallet password prompts"
 
 .PHONY: configure-shell
 configure-shell:
