@@ -21,11 +21,16 @@ ifeq ($(shell id -u),0)
 	rm -f /etc/systemd/system/mnt-backup.automount /etc/systemd/system/mnt-backup.mount
 	systemctl disable --now disable-gpu-aspm.service 2>/dev/null || true
 	rm -f /etc/systemd/system/disable-gpu-aspm.service /usr/local/sbin/disable-gpu-aspm
+	systemctl disable --now upnp-pinholes.timer upnp-pinholes.service 2>/dev/null || true
+	rm -f /etc/systemd/system/upnp-pinholes.timer /etc/systemd/system/upnp-pinholes.service
 	systemctl daemon-reload 2>/dev/null || true
 else
 	rm -rf $(USER_HOME)/.cache/thumbnails/fail/
 	rm -f $(USER_HOME)/.config/autostart/albert.desktop
 	rm -f $(USER_HOME)/.local/share/applications/pycharm-community.desktop
+	rm -f $(USER_HOME)/.config/kwalletrc
+	crontab -r 2>/dev/null || true
+	rm -f $(USER_HOME)/.config/cron/upnp-pinholes
 	kpackagetool6 -t Plasma/Applet -r com.github.antroids.application-title-bar 2>/dev/null || true
 	kpackagetool6 -t Plasma/Applet -r Plasma.Flex.Hub 2>/dev/null || true
 	kpackagetool6 -t Plasma/Applet -r com.github.chrtall.kppleMenu 2>/dev/null || true
