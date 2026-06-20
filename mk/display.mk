@@ -22,7 +22,8 @@ Section "Screen"
 EndSection
 endef
 
+# No lightdm restart: that tears down the session and resets the KScreen monitor
+# layout (blanking the second DisplayPort). The new config applies on next login.
 /etc/X11/xorg.conf:
 	$(file >$@,$(XORG_NVIDIA))
-	systemctl restart lightdm
-	@echo ">>> X11 configured for NVIDIA A4000 (single screen). LightDM restarted."
+	@echo ">>> X11 configured for NVIDIA A4000 (single screen) — applies on next login (no session restart)."

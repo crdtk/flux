@@ -29,6 +29,7 @@ else
 	rm -f $(USER_HOME)/.config/autostart/albert.desktop
 	rm -f $(USER_HOME)/.local/share/applications/pycharm-community.desktop
 	rm -f $(USER_HOME)/.config/kwalletrc
+	rm -f $(USER_HOME)/.config/autostart/enable-DP-*.desktop $(USER_HOME)/.config/autostart/displays-up.desktop $(USER_HOME)/.local/bin/displays-up
 	crontab -r 2>/dev/null || true
 	rm -f $(USER_HOME)/.config/cron/upnp-pinholes
 	kpackagetool6 -t Plasma/Applet -r com.github.antroids.application-title-bar 2>/dev/null || true

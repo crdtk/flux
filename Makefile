@@ -29,7 +29,10 @@
 #       for named aggregate actions (system, user, clean).
 # VI.   MAP, DON'T ENUMERATE. An apt-file-mappable path earns a `%` pattern rule, not
 #       an explicit recipe. A per-item action is $(foreach) building the target list
-#       + one `%` rule — never $(eval) or a shell `for`.
+#       + one `%` rule — never $(eval) or a shell `for`. Per-item decomposition also
+#       dissolves quoting/escaping: one trivial artifact per item (a single plain
+#       command) has no loop → no pipeline → no nested quotes → no escaping. When an
+#       embedded pipeline demands escape gymnastics, decompose — don't escape harder.
 # VII.  DEPENDENCY SHAPE. Expose only outermost targets; intermediates cascade.
 #       Order-only (|) voids $< — reference paths explicitly.
 # VIII. PRIVILEGE. One IS_ROOT gate at parse time; no sudo inside recipes (branch
@@ -47,6 +50,10 @@
 #       single operations: jq for JSON, xmllint for XML, awk/sed for text.
 #       Spawning python3 for a jq-expressible operation is an avoidable
 #       dependency and a readability cost.
+# XIII. STRUCTURED OUTPUT FIRST. Before scraping a command's human-readable text, vet it
+#       for a structured mode (--json, -j, --format=json) and parse that with jq (XII).
+#       Check every new command on adoption — text-scraping (awk/sed on colorized output,
+#       ANSI-stripping) is the fallback, never the first reach.
 #
 # ==========================================================
 
