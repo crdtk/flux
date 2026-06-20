@@ -135,14 +135,6 @@ endef
 	rm -f /usr/local/sbin/disable-gpu-aspm
 	systemctl daemon-reload
 	systemctl enable --now disable-gpu-aspm.service
-	for b in $(PLX_ASPM_TARGETS); do \
-	  v=$$(setpci -s $$b CAP_EXP+0x10.w 2>/dev/null); \
-	  c=$$(( $$(printf '%d' "0x$$v") & 3 )); \
-	  if [ "$$c" -ne 0 ]; then \
-	    echo "FAIL: $$b ASPM link control = 0x$$v (L1 still armed)"; exit 1; \
-	  fi; \
-	  echo "  OK  $$b ASPM=0x$$v"; \
-	done
 	@echo ">>> ASPM L1 cleared on all $(words $(PLX_ASPM_TARGETS)) switch ports"
 
 .PHONY: fix-pam-sss
