@@ -104,40 +104,46 @@ endif
 	update-grub
 	@echo ">>> kernel ASPM policy off (firmware still owns L1 — see disable-gpu-aspm.service)"
 
-# Firmware owns ASPM, so clear the ASPM Control bits (LnkCtl[1:0]) directly on the
-# GPU and its upstream switch port every boot. This is what actually stops Xid 79.
-define DISABLE_GPU_ASPM_SCRIPT
-#!/bin/sh
-gpu=$$(lspci -D | awk '/VGA.*NVIDIA/{print $$1; exit}')
-[ -n "$$gpu" ] || exit 0
-parent=$$(basename "$$(readlink -f /sys/bus/pci/devices/$$gpu/..)")
-for d in "$$gpu" "$$parent"; do setpci -s "$$d" CAP_EXP+0x10.w=0:3; done
-endef
+# --- disable-gpu-aspm.service ---
+# Firmware owns ASPM (_OSC denies the OS), so pcie_aspm=off is ignored.
+# Following the displays.mk pattern: sense topology at parse time (III),
+# emit one ExecStart per device (VI), no separate script file.
 
-/usr/local/sbin/disable-gpu-aspm:
-	mkdir -p $(dir $@)
-	$(file >$@,$(DISABLE_GPU_ASPM_SCRIPT))
-	chmod +x $@
+PLX_UPSTREAM    := $(shell lspci -D 2>/dev/null | awk '/PLX.*PEX 87/{print $$1; exit}')
+PLX_DOWNSTREAMS := $(if $(PLX_UPSTREAM),$(shell ls /sys/bus/pci/devices/$(PLX_UPSTREAM)/ 2>/dev/null | grep '^0000:'))
+PLX_GPU         := $(shell lspci -D 2>/dev/null | awk '/VGA.*NVIDIA/{print $$1}')
+PLX_ASPM_TARGETS := $(PLX_UPSTREAM) $(PLX_DOWNSTREAMS) $(PLX_GPU)
 
 define DISABLE_GPU_ASPM_UNIT
 [Unit]
-Description=Clear PCIe ASPM L1 on the GPU link (firmware owns ASPM; pcie_aspm=off ignored)
+Description=Clear PCIe ASPM L1 on all PLX switch ports (upstream + downstream + GPU)
 After=multi-user.target
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/local/sbin/disable-gpu-aspm
-
+$(foreach b,$(PLX_ASPM_TARGETS),ExecStart=/usr/bin/setpci -s $(b) CAP_EXP+0x10.w=0:3
+)
 [Install]
 WantedBy=multi-user.target
 endef
 
-/etc/systemd/system/disable-gpu-aspm.service: /usr/local/sbin/disable-gpu-aspm
+# Real consequence (I): unit file written, setpci runs now via enable --now.
+# Cleans up the old script file if upgrading from a previous version.
+/etc/systemd/system/disable-gpu-aspm.service:
 	$(file >$@,$(DISABLE_GPU_ASPM_UNIT))
+	rm -f /usr/local/sbin/disable-gpu-aspm
 	systemctl daemon-reload
 	systemctl enable --now disable-gpu-aspm.service
-	@echo ">>> disable-gpu-aspm.service enabled — clears ASPM L1 on the GPU link each boot"
+	for b in $(PLX_ASPM_TARGETS); do \
+	  v=$$(setpci -s $$b CAP_EXP+0x10.w 2>/dev/null); \
+	  c=$$(( $$(printf '%d' "0x$$v") & 3 )); \
+	  if [ "$$c" -ne 0 ]; then \
+	    echo "FAIL: $$b ASPM link control = 0x$$v (L1 still armed)"; exit 1; \
+	  fi; \
+	  echo "  OK  $$b ASPM=0x$$v"; \
+	done
+	@echo ">>> ASPM L1 cleared on all $(words $(PLX_ASPM_TARGETS)) switch ports"
 
 .PHONY: fix-pam-sss
 fix-pam-sss:
