@@ -1,10 +1,29 @@
-include mk/user/utility/utility.mk
-include mk/user/development/development.mk
-include mk/user/settings/settings.mk
+# Privilege roll-up — parsed after every feature module so the accumulators
+# (HARDENING/MANAGEMENT/PKG_APPS/DISPLAY_CONFIG/COMPUTE/STORAGE, USER_FILES) are
+# complete. Branches of the IS_ROOT gate (VIII): `system` builds root artifacts,
+# `user` builds the user's. Capability senses (SYS_SM, GPU_BDF, SN8100) come from the
+# features that own them — defined before this file by the feature globs.
+
+# ---- system (root) ----
+.PHONY: system
+
+COMPUTE_CAPABLE := $(shell [ -n "$(SYS_SM)" ] && [ "$(SYS_SM)" -ge 75 ] && echo 1)
+SN8100_PRESENT  := $(shell test -e /dev/disk/by-label/backup && echo 1)
+
+INSTALL := $(HARDENING) $(MANAGEMENT) $(PKG_APPS) $(DISPLAY_CONFIG) \
+           $(if $(COMPUTE_CAPABLE),$(COMPUTE),) \
+           $(if $(SN8100_PRESENT),$(STORAGE),)
+PENDING := $(filter-out $(wildcard $(INSTALL)),$(INSTALL))
+
+system: $(PENDING)
+	update-initramfs -u
+	$(APT) autoremove
+
+# ---- user (non-root) ----
+.PHONY: user
 
 USER_PENDING := $(filter-out $(wildcard $(USER_FILES)),$(USER_FILES))
 
-.PHONY: user
 user: $(USER_PENDING) \
     configure-top-panel \
     configure-bottom-panel \
