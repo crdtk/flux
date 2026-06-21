@@ -235,3 +235,25 @@ kaggle-run: $(KAGGLE_KERNEL) | $(KAGGLE)
 	mkdir -p $(KAGGLE_OUT_DIR); \
 	$(KAGGLE) kernels output $$KERNEL -p $(KAGGLE_OUT_DIR); \
 	echo ">>> output → $(KAGGLE_OUT_DIR)/"
+
+# ----------------------------------------------------------
+# LLM-Intensive Applications demo — local Qwen3.5-0.8B, no cloud GPU
+# ----------------------------------------------------------
+
+RASCHKA_VENV   := demos/LLMs-from-scratch/venv
+RASCHKA_PY     := $(RASCHKA_VENV)/bin/python3
+RASCHKA_KERNEL := $(USER_HOME)/.local/share/jupyter/kernels/raschka/kernel.json
+
+$(RASCHKA_PY):
+	cd demos/LLMs-from-scratch && $(UV) venv venv --python 3.12
+	VIRTUAL_ENV=$(CURDIR)/$(RASCHKA_VENV) $(UV) pip install -q torch tokenizers huggingface_hub safetensors
+	@echo ">>> Raschka venv ready at $(RASCHKA_VENV)"
+
+$(RASCHKA_KERNEL): | $(RASCHKA_PY)
+	VIRTUAL_ENV=$(CURDIR)/$(RASCHKA_VENV) $(UV) pip install -q ipykernel jupyter
+	$(RASCHKA_PY) -m ipykernel install --user --name raschka --display-name "Raschka LLMs-from-scratch"
+	@echo ">>> Raschka kernel ready"
+
+.PHONY: llm-intensive-demo
+llm-intensive-demo: | $(RASCHKA_KERNEL) $(TQ_KERNEL)
+	cd demos/llm-intensive-applications && $(VENV)/bin/jupyter notebook llm_intensive_demo.ipynb
