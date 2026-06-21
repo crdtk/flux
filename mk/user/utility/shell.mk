@@ -3,11 +3,13 @@ SSH_CONFIG          := $(USER_HOME)/.ssh/config
 BASHRC              := $(USER_HOME)/.bashrc
 MAKE_COMPLETION     := /usr/share/bash-completion/completions/make
 MAKE_COMPLETION_OK  := $(shell grep -c 'bash-completion/completions/make' $(BASHRC) 2>/dev/null)
-TAILSCALE_IP         := $(shell tailscale ip -4 2>/dev/null)
-
+# concise.dynv6.net is a STATIC A record (set at dynv6) pointing at crucible's stable
+# Tailscale IP (100.x). Reaches the box over Tailscale — no port forwarding, no WAN
+# exposure, tailnet members only. A fixed string, so no runtime sensing and correct
+# whichever host or phase writes this file.
 define SSH_CONFIG_CONTENT
-Host crucible
-	HostName $(or $(TAILSCALE_IP),concise.dynv6.net)
+Host crucible concise
+	HostName concise.dynv6.net
 	User m
 	IdentityFile $(SSH_KEY)
 	ServerAliveInterval 60

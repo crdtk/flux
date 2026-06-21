@@ -3,27 +3,23 @@
 # ports or port forwarding. Installed from the upstream repo for the latest
 # stable release.
 
+-include $(PROJECTS)/secrets/tailscale.conf
+
 TAILSCALE_LOGGED_IN := $(shell tailscale status 2>/dev/null | grep -qc '^100\.' && echo 1)
-TAILSCALE_AUTH_KEY  := $(shell sed -n 's/^tailscale_auth_key=//p' $(PROJECTS)/secrets/tailscale.conf 2>/dev/null | tr -d "'\"")
 
 ifneq ($(TAILSCALE_LOGGED_IN),1)
-MANAGEMENT += $(if $(TAILSCALE_AUTH_KEY),.tailscale-up-with-key,.tailscale-up-warn)
+MANAGEMENT += .tailscale-ensure
 endif
-
-TAILSCALE_UP_FLAGS := --accept-routes --accept-dns
-
-.tailscale-up-with-key: /usr/bin/tailscale
-	tailscale up --authkey "$(TAILSCALE_AUTH_KEY)" $(TAILSCALE_UP_FLAGS)
-	@echo ">>> Tailscale authenticated"
-
-.tailscale-up-warn: /usr/bin/tailscale
-	@echo ">>> WARNING: Tailscale installed but not authenticated."
-	@echo ">>> Run 'tailscale up' as root interactively to connect."
-	@echo ">>> Or store an auth key: echo 'tailscale_auth_key=tskey-...' > $(PROJECTS)/secrets/tailscale.conf"
 
 /usr/bin/tailscale: /etc/apt/sources.list.d/tailscale.list
 	$(APT) update
 	$(APT) install -y tailscale
+
+TAILSCALE_UP_FLAGS := --accept-routes --accept-dns
+
+.tailscale-ensure: /usr/bin/tailscale
+	$(if $(tailscale_auth_key),tailscale up --authkey "$(tailscale_auth_key)" $(TAILSCALE_UP_FLAGS))
+	$(if $(tailscale_auth_key),@echo ">>> Tailscale authenticated",@echo ">>> WARNING: Tailscale installed but not authenticated.")
 
 /etc/apt/sources.list.d/tailscale.list: /usr/share/keyrings/tailscale-archive-keyring.gpg
 	curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/$(UBUNTU_CODENAME).tailscale-keyring.list -o $@
