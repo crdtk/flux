@@ -17,7 +17,7 @@ include mk/system/compute.mk
 include mk/system/hardening.mk
 include mk/system/management.mk
 include mk/system/storage.mk
-include mk/system/upnpc.mk
+include mk/system/tailscale.mk
 
 .PHONY: system
 

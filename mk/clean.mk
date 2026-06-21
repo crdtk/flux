@@ -16,13 +16,12 @@ ifeq ($(shell id -u),0)
 	rm -f $(CUDA_KEYRING_DEB) /etc/apt/sources.list.d/cuda-ubuntu*-x86_64.list
 	rm -f /etc/apt/preferences.d/no-snapd
 	rm -f /etc/systemd/system/packagekit.service
-	rm -f /etc/ddclient.conf
 	systemctl disable --now mnt-backup.automount mnt-backup.mount 2>/dev/null || true
 	rm -f /etc/systemd/system/mnt-backup.automount /etc/systemd/system/mnt-backup.mount
 	systemctl disable --now disable-gpu-aspm.service 2>/dev/null || true
 	rm -f /etc/systemd/system/disable-gpu-aspm.service /usr/local/sbin/disable-gpu-aspm
-	systemctl disable --now upnp-pinholes.timer upnp-pinholes.service 2>/dev/null || true
-	rm -f /etc/systemd/system/upnp-pinholes.timer /etc/systemd/system/upnp-pinholes.service
+	systemctl disable --now tailscaled 2>/dev/null || true
+	rm -f /etc/apt/sources.list.d/tailscale.list /usr/share/keyrings/tailscale-archive-keyring.gpg
 	systemctl daemon-reload 2>/dev/null || true
 else
 	rm -rf $(USER_HOME)/.cache/thumbnails/fail/
@@ -31,7 +30,6 @@ else
 	rm -f $(USER_HOME)/.config/kwalletrc
 	rm -f $(USER_HOME)/.config/autostart/enable-DP-*.desktop $(USER_HOME)/.config/autostart/displays-up.desktop $(USER_HOME)/.local/bin/displays-up
 	crontab -r 2>/dev/null || true
-	rm -f $(USER_HOME)/.config/cron/upnp-pinholes
 	kpackagetool6 -t Plasma/Applet -r com.github.antroids.application-title-bar 2>/dev/null || true
 	kpackagetool6 -t Plasma/Applet -r Plasma.Flex.Hub 2>/dev/null || true
 	kpackagetool6 -t Plasma/Applet -r com.github.chrtall.kppleMenu 2>/dev/null || true

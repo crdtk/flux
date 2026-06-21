@@ -3,10 +3,11 @@ SSH_CONFIG          := $(USER_HOME)/.ssh/config
 BASHRC              := $(USER_HOME)/.bashrc
 MAKE_COMPLETION     := /usr/share/bash-completion/completions/make
 MAKE_COMPLETION_OK  := $(shell grep -c 'bash-completion/completions/make' $(BASHRC) 2>/dev/null)
+TAILSCALE_IP         := $(shell tailscale ip -4 2>/dev/null)
 
 define SSH_CONFIG_CONTENT
 Host crucible
-	HostName concise.dynv6.net
+	HostName $(or $(TAILSCALE_IP),concise.dynv6.net)
 	User m
 	IdentityFile $(SSH_KEY)
 	ServerAliveInterval 60
