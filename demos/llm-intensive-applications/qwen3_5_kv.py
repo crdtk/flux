@@ -25,6 +25,7 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from tokenizers import Tokenizer
 
 _RASCHKA_QWEN35_DIR = Path(__file__).resolve().parents[1] / "LLMs-from-scratch" / "ch05" / "16_qwen3.5"
@@ -32,6 +33,40 @@ if str(_RASCHKA_QWEN35_DIR) not in sys.path:
     sys.path.insert(0, str(_RASCHKA_QWEN35_DIR))
 
 from qwen3_5_transformers import Qwen3_5GatedDeltaNet  # noqa: E402
+
+# Enable the flash-linear-attention CUDA fast path — Raschka's standalone copy
+# leaves is_fast_path_available=False by default (no import attempt). Patch the
+# module before the class is instantiated so __init__ picks up the real kernels.
+# Pre-load libcudart.so.12 for causal_conv1d, which requires it at import time.
+try:
+    import ctypes
+    try:
+        ctypes.CDLL("libcudart.so.12")
+    except OSError:
+        for _libdir in (
+            "/home/m/Desktop/.lmstudio/extensions/backends/vendor/linux-llama-cuda12-vendor-v1",
+            "/home/m/.cache/uv/archive-v0/g0k_usdvCOelXOIX/nvidia/cuda_runtime/lib",
+        ):
+            try:
+                ctypes.CDLL(f"{_libdir}/libcudart.so.12")
+                break
+            except OSError:
+                continue
+
+    from causal_conv1d import causal_conv1d_fn as _cc1d_fn
+    from causal_conv1d import causal_conv1d_update as _cc1d_upd
+    from fla.ops.gated_delta_rule import chunk_gated_delta_rule as _cgdr
+    from fla.ops.gated_delta_rule import fused_recurrent_gated_delta_rule as _frgdr
+
+    import qwen3_5_transformers as _q35t
+    _q35t.causal_conv1d_fn = _cc1d_fn
+    _q35t.causal_conv1d_update = _cc1d_upd
+    _q35t.chunk_gated_delta_rule = _cgdr
+    _q35t.fused_recurrent_gated_delta_rule = _frgdr
+    _q35t.is_fast_path_available = True
+    print(">>> flash-linear-attention fast path enabled")
+except ImportError:
+    pass
 
 # ---------------------------------------------------------------------------
 # Ported from qwen3.5-plus-kv-cache.ipynb
@@ -199,15 +234,13 @@ class GroupedQueryAttention(nn.Module):
         else:
             next_cache = (keys_new, values_new)
 
-        attn_scores = queries @ keys.transpose(2, 3)
-        attn_scores = attn_scores.masked_fill(mask, -torch.inf)
-        attn_weights = torch.softmax(
-            attn_scores * (self.head_dim ** -0.5),
-            dim=-1,
-            dtype=torch.float32,
-        ).to(queries.dtype)
-
-        context = (attn_weights @ values).transpose(1, 2).reshape(b, num_tokens, self.d_out)
+        context = F.scaled_dot_product_attention(
+            queries, keys, values,
+            attn_mask=None,
+            dropout_p=0.0,
+            is_causal=True,
+            scale=self.head_dim ** -0.5,
+        ).transpose(1, 2).reshape(b, num_tokens, self.d_out)
 
         # Qwen3.5 full-attention uses a gated Q projection
         context = context * torch.sigmoid(gate)

@@ -248,23 +248,41 @@ kaggle-run: $(KAGGLE_KERNEL) | $(KAGGLE)
 	echo ">>> output → $(KAGGLE_OUT_DIR)/"
 
 # ----------------------------------------------------------
-# LLM-Intensive Applications demo — local Qwen3.5-0.8B, no cloud GPU
+# LLM-Intensive Applications demo — local Qwen3.5-0.8B, no cloud GPU.
+# Runs in the central venv ($(VENV)) on the TurboQuant kernel. qwen3_5_kv.py is a
+# local module, so papermill executes with --cwd in the demo dir; -k overrides the
+# notebook's own kernelspec. The notebook self-installs tokenizers/hf_hub/safetensors,
+# but they're added here too so the first run isn't slowed by pip.
 # ----------------------------------------------------------
 
-RASCHKA_VENV   := demos/LLMs-from-scratch/venv
-RASCHKA_PY     := $(RASCHKA_VENV)/bin/python3
-RASCHKA_KERNEL := $(USER_HOME)/.local/share/jupyter/kernels/raschka/kernel.json
+LLMI_DIR  := demos/llm-intensive-applications
+LLMI_OUT  := $(LLMI_DIR)/llm_intensive_demo.out.ipynb
 
-$(RASCHKA_PY):
-	cd demos/LLMs-from-scratch && $(UV) venv venv --python 3.12
-	VIRTUAL_ENV=$(CURDIR)/$(RASCHKA_VENV) $(UV) pip install -q torch tokenizers huggingface_hub safetensors
-	@echo ">>> Raschka venv ready at $(RASCHKA_VENV)"
+RASCHKA_SRC   := /home/m/Desktop/Projects/LLMs-from-scratch
+RASCHKA_LINK  := demos/LLMs-from-scratch
+RASCHKA_QWEN  := $(RASCHKA_LINK)/ch05/16_qwen3.5/qwen3_5_transformers.py
 
-$(RASCHKA_KERNEL): | $(RASCHKA_PY)
-	VIRTUAL_ENV=$(CURDIR)/$(RASCHKA_VENV) $(UV) pip install -q ipykernel jupyter
-	$(RASCHKA_PY) -m ipykernel install --user --name raschka --display-name "Raschka LLMs-from-scratch"
-	@echo ">>> Raschka kernel ready"
+# HF_TOKEN for authenticated downloads — optional, avoids rate-limit warnings.
+HF_CONF := $(PROJECTS)/secrets/hf.conf
+-include $(HF_CONF)
 
+# Symlink to the existing Raschka checkout at $(RASCHKA_SRC), then fetch upstream so
+# ch05/16_qwen3.5/qwen3_5_transformers.py (imported by qwen3_5_kv.py) is available.
+$(RASCHKA_QWEN):
+	@test -L $(RASCHKA_LINK) || ln -s $(RASCHKA_SRC) $(RASCHKA_LINK)
+	cd $(RASCHKA_SRC) && git fetch --depth 1 origin && git checkout origin/main -- ch05/16_qwen3.5/
+	@echo ">>> ready: $@"
+
+# Headless papermill execution via uv run (auto-resolves deps). --log-output streams
+# each cell's stdout/stderr to the console; the executed notebook is the durable record.
+# -k overrides the notebook's kernelspec; --cwd makes qwen3_5_kv.py importable.
 .PHONY: llm-intensive-demo
-llm-intensive-demo: | $(RASCHKA_KERNEL) $(TQ_KERNEL)
-	cd demos/llm-intensive-applications && $(VENV)/bin/jupyter notebook llm_intensive_demo.ipynb
+llm-intensive-demo: $(RASCHKA_QWEN)
+	HF_TOKEN=$(HF_TOKEN) \
+	LD_LIBRARY_PATH=$(HOME)/Desktop/.lmstudio/extensions/backends/vendor/linux-llama-cuda12-vendor-v1:$$LD_LIBRARY_PATH \
+	$(UV) run \
+	  --with torch --with tokenizers --with huggingface_hub --with safetensors \
+	  --with papermill --with flash-linear-attention --with causal-conv1d \
+	  papermill --log-output \
+	  $(LLMI_DIR)/llm_intensive_demo.ipynb $(LLMI_OUT) -k turboquant --cwd $(LLMI_DIR)
+	@echo ">>> executed → $(LLMI_OUT)"
