@@ -3,13 +3,15 @@ SSH_CONFIG          := $(USER_HOME)/.ssh/config
 BASHRC              := $(USER_HOME)/.bashrc
 MAKE_COMPLETION     := /usr/share/bash-completion/completions/make
 MAKE_COMPLETION_OK  := $(shell grep -c 'bash-completion/completions/make' $(BASHRC) 2>/dev/null)
-# concise.dynv6.net is a STATIC A record (set at dynv6) pointing at crucible's stable
-# Tailscale IP (100.x). Reaches the box over Tailscale — no port forwarding, no WAN
-# exposure, tailnet members only. A fixed string, so no runtime sensing and correct
-# whichever host or phase writes this file.
+# crucible.dns.army is its own dynv6 zone whose A record is crucible's stable Tailscale
+# IP (100.x). dynv6 keeps auto-populating the zone's IPv6 prefix from the account's
+# WAN prefix (fed by FRITZ), so AddressFamily inet pins SSH to the IPv4 A record and
+# ignores the AAAA entirely — immune to any v6 clobbering. Reaches the box over
+# Tailscale: no port forwarding, no WAN exposure, tailnet members only.
 define SSH_CONFIG_CONTENT
-Host crucible concise
-	HostName concise.dynv6.net
+Host crucible
+	HostName crucible.dns.army
+	AddressFamily inet
 	User m
 	IdentityFile $(SSH_KEY)
 	ServerAliveInterval 60

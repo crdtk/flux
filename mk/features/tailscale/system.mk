@@ -4,8 +4,9 @@
 # stable release.
 
 # Contract with user.mk: the user half writes this file, the system half reads the key.
+# Read via $(shell) (not -include) so Make doesn't try to rebuild the file at parse time.
 TAILSCALE_CONF := $(PROJECTS)/secrets/tailscale.conf
--include $(TAILSCALE_CONF)
+tailscale_auth_key := $(shell test -f $(TAILSCALE_CONF) && sed -n 's/^tailscale_auth_key=//p' $(TAILSCALE_CONF))
 
 TAILSCALE_LOGGED_IN := $(shell tailscale status 2>/dev/null | grep -qc '^100\.' && echo 1)
 
