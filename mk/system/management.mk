@@ -1,4 +1,3 @@
-PROJECTS    := $(USER_HOME)/Desktop/Projects
 RUN_AS_USER := $(or $(SUDO_USER),$(USER))
 RUN_AS_UID  := $(shell id -u $(RUN_AS_USER))
 

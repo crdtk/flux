@@ -91,6 +91,7 @@ all: $(if $(IS_ROOT),system,user)
 
 APT             := DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=-1
 USER_HOME       := $(shell getent passwd $${SUDO_USER:-$$(whoami)} | cut -d: -f6)
+PROJECTS        := $(USER_HOME)/Desktop/Projects
 DOWNLOADS_DIR   := $(USER_HOME)/Downloads
 UBUNTU_VER      := $(shell lsb_release -rs 2>/dev/null | tr -d '.')
 UBUNTU_CODENAME := $(shell lsb_release -cs 2>/dev/null)
@@ -120,8 +121,8 @@ include mk/user/user.mk
 # ----------------------------------------------------------
 
 UNTRACKED_PKGS  := git avahi-daemon arp-scan nmap appmenu-gtk3-module appmenu-registrar
-LAZILY_RESOLVED := syncthing npm mc libheif-examples gwenview ddclient cockpit cockpit-files \
-                   cmake g++-14 rclone plasma-session-x11 flameshot gh plasma-widgets-addons
+LAZILY_RESOLVED := syncthing npm mc libheif-examples gwenview cockpit cockpit-files \
+                   cmake g++-14 rclone plasma-session-x11 flameshot gh plasma-widgets-addons xclip
 
 /usr/bin/apt-file: | /etc/systemd/system/packagekit.service
 	$(APT) update
