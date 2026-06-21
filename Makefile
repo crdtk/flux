@@ -54,6 +54,26 @@
 #       for a structured mode (--json, -j, --format=json) and parse that with jq (XII).
 #       Check every new command on adoption — text-scraping (awk/sed on colorized output,
 #       ANSI-stripping) is the fallback, never the first reach.
+# XIV.  CASCADE ORDERING. State the top-level requirement first (MANAGEMENT += /path),
+#       then resolve each dependency one level deeper in the targets below. Only
+#       leaf requirements go into accumulator variables — if target Y exists solely
+#       as a prerequisite of target X, and X is already in MANAGEMENT, then Y must
+#       not also appear in MANAGEMENT (Make resolves Y through X's dependency chain).
+#       Targets appear from most dependent to most foundational (dependents before
+#       prerequisites, enforced by p9). No intermediate variables for target paths
+#       — write the literal path where Make tracks it. The cascade reads as a demand
+#       chain: "to build X, you need Y; to build Y, you need Z."
+# XV.   COMMENT SCOPE. Module headers describe what that module does — not how.
+#       General conventions (ordering, naming, privilege) are stated once in this
+#       constitution and referenced by number (e.g. "XIV") in module comments when
+#       a specific application of a principle needs a footnote. Avoid restating the
+#       principle itself.
+# XVI.  COMPOSE, DON'T BRANCH. Prefer Make's functional forms ($(if ...), $(or ...),
+#       $(foreach ...), $(filter ...)) over imperative control-flow directives
+#       (ifneq/endif, ifdef/endif). A conditional should yield a value, not gate a
+#       block. Functional forms are shorter, composable at the expression level, and
+#       keep variable definitions as single-line declarations rather than multi-line
+#       sections.
 #
 # ==========================================================
 
