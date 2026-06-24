@@ -9,10 +9,14 @@ VSCODE_USER_SETTINGS := $(USER_HOME)/.config/Code/User/settings.json
 OPENCODE_ZEN_KEY     := $(shell sed -n 's/^opencode_zen_key=//p' $(PROJECTS)/secrets/opencode.conf 2>/dev/null | tr -d "'\"")
 USER_FILES           += $(VSCODE_SETTINGS)
 
+# Absolute path via ${workspaceFolder}: a relative ".venv/bin/python3" makes the pet
+# locator spawn from its own cwd and fail to resolve (then it silently auto-discovers).
+# Merge, don't clobber — preserves any other keys already in the file.
 $(VSCODE_SETTINGS):
 	mkdir -p $(dir $@)
-	printf '{}' | jq '. + {"python.defaultInterpreterPath": ".venv/bin/python3"}' > $@
-	@echo ">>> .vscode/settings.json: defaultInterpreterPath → .venv/bin/python3"
+	test -f $@ || printf '{}' > $@
+	jq '. + {"python.defaultInterpreterPath": "$${workspaceFolder}/.venv/bin/python"}' $@ > $@.tmp && mv $@.tmp $@
+	@echo ">>> .vscode/settings.json: defaultInterpreterPath → $${workspaceFolder}/.venv/bin/python"
 
 .PHONY: configure-vscode
 

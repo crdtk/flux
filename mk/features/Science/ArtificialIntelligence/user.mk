@@ -8,5 +8,5 @@ USER_FILES += \
 $(USER_HOME)/.local/bin/%:
 	mkdir -p $(dir $@)
 	@command -v npm >/dev/null 2>&1 \
-	  && npm install --prefix $(USER_HOME)/.local -g $(NPM_PKG_$*) \
+	  && npm install --uninstall --prefix $(USER_HOME)/.local -g $(NPM_PKG_$*) \
 	  || echo ">>> WARNING: npm not found — skipping $* (sudo make installs npm; make again picks it up)"

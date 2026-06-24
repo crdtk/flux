@@ -1,4 +1,4 @@
-include mk/features/panels/top.mk
-include mk/features/panels/bottom.mk
+include mk/features/Settings/Panels/top.mk
+include mk/features/Settings/Panels/bottom.mk
 
-include mk/features/panels/desktop.mk
+include mk/features/Settings/Panels/desktop.mk

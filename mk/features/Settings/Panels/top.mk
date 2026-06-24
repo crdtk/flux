@@ -1,4 +1,4 @@
-include mk/features/panels/plasmashell.mk
+include mk/features/Settings/Panels/plasmashell.mk
 
 ## Title widget: text-only normally; close/min/max appear far-left only when
 ## maximized — the one state borderless windows lack their own buttons (Unity).
