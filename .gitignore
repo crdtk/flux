@@ -23,3 +23,4 @@ demos/prefix-caching/output/
 # OS
 .DS_Store
 Thumbs.db
+demos/llm-intensive-applications/__pycache__/qwen3_5_kv.cpython-312.pyc
