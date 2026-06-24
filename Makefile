@@ -90,6 +90,12 @@
 #       accumulators into the system:/user: targets. The intra-feature contract (shared
 #       path/var) is declared in its system.mk, which the user glob sees because
 #       */*/system.mk parses first.
+# XVIII. INVARIANTS AS PREREQUISITES. A file that must exist for a target to be correctly
+#       deployed — not just present, but safe and complete — is a prerequisite of that
+#       target, not an independent accumulator entry. Accumulator entries declare
+#       independent capabilities; prerequisites declare invariants. If removing Y would
+#       leave X broken or unsafe, Y belongs on X's prerequisite line, not in the
+#       accumulator.
 #
 # ==========================================================
 

@@ -10,7 +10,31 @@ CLAUDE_PREFIX := /usr/local/lib/claude-code
 
 MANAGEMENT += /usr/local/bin/claude
 
-/usr/local/bin/claude:
+# XVIII: policy is an invariant of the binary — binary not considered installed without it.
+/usr/local/bin/claude: /etc/claude-code/managed-settings.d/99-block-secrets.json
 	mkdir -p $(CLAUDE_PREFIX)
 	curl -fsSL https://claude.ai/install.sh | env HOME=$(CLAUDE_PREFIX) bash
 	ln -sf $(CLAUDE_PREFIX)/.local/bin/claude $@
+
+define CLAUDE_SECRETS_POLICY
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env*)",
+      "Read(./**/*.key)",
+      "Read(./**/secrets/**)",
+      "Bash(*cat *.env*)",
+      "Bash(*printenv*)",
+      "Bash(*env*)"
+    ]
+  }
+}
+endef
+
+# VII: order-only prerequisite — directory must exist before $(file ...) expands.
+/etc/claude-code/managed-settings.d/99-block-secrets.json: | /etc/claude-code/managed-settings.d
+	$(file >$@,$(CLAUDE_SECRETS_POLICY))
+	@echo ">>> Claude Code managed policy: secrets access denied"
+
+/etc/claude-code/managed-settings.d:
+	mkdir -p $@
