@@ -77,10 +77,13 @@
 # XVII. FEATURE MODULES. One capability per directory, classified by the freedesktop.org
 #       menu taxonomy: mk/features/<MainCategory>/<AdditionalCategory>/ (see
 #       specifications.freedesktop.org/menu — e.g. Network/RemoteAccess, Development/IDE,
-#       System/Security). Its root and user artifacts live in system.mk and user.mk —
+#       System/Security). An Additional category may nest a specific application one
+#       level deeper (Development/IDE/VS-Code/), each app a leaf with its own
+#       system.mk/user.mk. Its root and user artifacts live in system.mk and user.mk —
 #       privilege (VIII) stays auditable as the filename: "what runs as root" is every
-#       */*/system.mk. The top routers wildcard-include */*/system.mk then */*/user.mk,
-#       so adding a capability is dropping a directory — no include edits (VI, XI). A
+#       system.mk. The top routers find-include every system.mk then every user.mk at
+#       any depth (Main/Additional, optionally /App, /App/Variant), so adding a
+#       capability is dropping a directory — no include edits (VI, XI). A
 #       single-privilege feature has only one of the two files; a feature's extra parts
 #       are included by its own entry file. Cross-feature infrastructure lives in
 #       mk/common.mk (parsed before the globs); mk/aggregate.mk (parsed after) rolls the
@@ -126,8 +129,8 @@ USER_FILES :=
 
 include mk/clean.mk
 include mk/common.mk
-include $(wildcard mk/features/*/*/system.mk)
-include $(wildcard mk/features/*/*/user.mk)
+include $(shell find mk/features -name system.mk | sort)
+include $(shell find mk/features -name user.mk | sort)
 include mk/aggregate.mk
 
 # ----------------------------------------------------------
