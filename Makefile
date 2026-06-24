@@ -74,16 +74,19 @@
 #       block. Functional forms are shorter, composable at the expression level, and
 #       keep variable definitions as single-line declarations rather than multi-line
 #       sections.
-# XVII. FEATURE MODULES. One capability per directory under mk/features/. Its root and
-#       user artifacts live in system.mk and user.mk — privilege (VIII) stays auditable
-#       as the filename: "what runs as root" is every */system.mk. The top routers
-#       wildcard-include */system.mk then */user.mk, so adding a capability is dropping
-#       a directory — no include edits (VI, XI). A single-privilege feature has only one
-#       of the two files; a feature's extra parts are included by its own entry file.
-#       Cross-feature infrastructure lives in mk/common.mk (parsed before the globs);
-#       mk/aggregate.mk (parsed after) rolls the accumulators into the system:/user:
-#       targets. The intra-feature contract (shared path/var) is declared in its
-#       system.mk, which the user glob sees because */system.mk parses first.
+# XVII. FEATURE MODULES. One capability per directory, classified by the freedesktop.org
+#       menu taxonomy: mk/features/<MainCategory>/<AdditionalCategory>/ (see
+#       specifications.freedesktop.org/menu — e.g. Network/RemoteAccess, Development/IDE,
+#       System/Security). Its root and user artifacts live in system.mk and user.mk —
+#       privilege (VIII) stays auditable as the filename: "what runs as root" is every
+#       */*/system.mk. The top routers wildcard-include */*/system.mk then */*/user.mk,
+#       so adding a capability is dropping a directory — no include edits (VI, XI). A
+#       single-privilege feature has only one of the two files; a feature's extra parts
+#       are included by its own entry file. Cross-feature infrastructure lives in
+#       mk/common.mk (parsed before the globs); mk/aggregate.mk (parsed after) rolls the
+#       accumulators into the system:/user: targets. The intra-feature contract (shared
+#       path/var) is declared in its system.mk, which the user glob sees because
+#       */*/system.mk parses first.
 #
 # ==========================================================
 
@@ -123,8 +126,8 @@ USER_FILES :=
 
 include mk/clean.mk
 include mk/common.mk
-include $(wildcard mk/features/*/system.mk)
-include $(wildcard mk/features/*/user.mk)
+include $(wildcard mk/features/*/*/system.mk)
+include $(wildcard mk/features/*/*/user.mk)
 include mk/aggregate.mk
 
 # ----------------------------------------------------------
