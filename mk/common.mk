@@ -2,6 +2,11 @@
 # the feature globs so features may reference these (Kubuntu backports source used by
 # graphics + audiovideo; the .desktop pattern rule used by development + network).
 
+# The human running the build: $(SUDO_USER) under `sudo make`, else $(USER). Cross-feature
+# (Monitor derives RUN_AS_UID + runs user services as them; Settings/Security checks their
+# group), so it lives here, parsed before the globs.
+RUN_AS_USER := $(or $(SUDO_USER),$(USER))
+
 # Fleet capability sense (III): probe GPU *presence* via lspci — works on a bare box
 # before any driver exists, unlike nvidia-smi. Used by both ParallelComputing (driver +
 # CUDA) and Security (nouveau/nvidia modprobe), so it lives here, parsed before the globs.

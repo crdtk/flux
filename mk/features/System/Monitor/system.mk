@@ -1,5 +1,4 @@
-RUN_AS_USER := $(or $(SUDO_USER),$(USER))
-RUN_AS_UID  := $(shell id -u $(RUN_AS_USER))
+RUN_AS_UID  := $(shell id -u $(RUN_AS_USER))   # RUN_AS_USER from common.mk
 
 PRINTER_NAME := hp-laserjet-mfp-2604sdw
 PRINTER_PPD  := /etc/cups/ppd/$(PRINTER_NAME).ppd
