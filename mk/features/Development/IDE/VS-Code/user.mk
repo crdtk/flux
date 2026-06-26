@@ -6,7 +6,8 @@ VSCODE_GITMSG_OK      := $(shell ls $(USER_HOME)/.vscode/extensions 2>/dev/null 
 
 VSCODE_SETTINGS      := $(CURDIR)/.vscode/settings.json
 VSCODE_USER_SETTINGS := $(USER_HOME)/.config/Code/User/settings.json
-OPENCODE_ZEN_KEY     := $(shell sed -n 's/^opencode_zen_key=//p' $(PROJECTS)/secrets/opencode.conf 2>/dev/null | tr -d "'\"")
+# OPENCODE_ZEN_KEY comes from the environment (Make auto-imports env vars); the
+# gitMessageGenerator block below is skipped when it's unset.
 USER_FILES           += $(VSCODE_SETTINGS)
 
 # Absolute path via ${workspaceFolder}: a relative ".venv/bin/python3" makes the pet

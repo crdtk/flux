@@ -1,5 +1,4 @@
 PKG_APPS += \
   /usr/bin/terminator \
   /usr/bin/mc \
-  /usr/bin/plank \
-  /usr/bin/secret-tool
+  /usr/bin/plank

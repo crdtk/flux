@@ -214,12 +214,8 @@ KAGGLE_KERNEL  := demos/prefix-caching/.kaggle-kernel
 KAGGLE_OUT_DIR := demos/prefix-caching/output
 KAGGLE         := $(USER_HOME)/.local/bin/kaggle
 
-# Read from the GNOME keyring if not already set in the environment.
-# Store with:
-#   secret-tool store --label='Kaggle username' service kaggle token_type username
-#   secret-tool store --label='Kaggle API key'  service kaggle token_type api_key
-KAGGLE_USERNAME  ?= $(shell secret-tool lookup service kaggle token_type username  2>/dev/null)
-KAGGLE_API_TOKEN ?= $(shell secret-tool lookup service kaggle token_type api_key   2>/dev/null)
+# KAGGLE_USERNAME / KAGGLE_API_TOKEN come from the environment (Make auto-imports env
+# vars). kaggle-run checks they're set and errors clearly if not.
 
 define KAGGLE_META_JSON
 {"id":"$(KAGGLE_USERNAME)/$(KAGGLE_SLUG)","title":"Prefix Caching Demo","code_file":"prefix_caching_demo.ipynb",
@@ -274,9 +270,7 @@ RASCHKA_SRC   := /home/m/Desktop/Projects/LLMs-from-scratch
 RASCHKA_LINK  := demos/LLMs-from-scratch
 RASCHKA_QWEN  := $(RASCHKA_LINK)/ch05/16_qwen3.5/qwen3_5_transformers.py
 
-# HF_TOKEN for authenticated downloads — optional, avoids rate-limit warnings.
-HF_CONF := $(PROJECTS)/secrets/hf.conf
--include $(HF_CONF)
+# HF_TOKEN for authenticated downloads — optional, from the environment.
 
 # Symlink to the existing Raschka checkout at $(RASCHKA_SRC), then fetch upstream so
 # ch05/16_qwen3.5/qwen3_5_transformers.py (imported by qwen3_5_kv.py) is available.

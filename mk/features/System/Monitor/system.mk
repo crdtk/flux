@@ -23,10 +23,6 @@ MANAGEMENT += \
   $(if $(ST_GUI_REMOTE_OK),,configure-syncthing-gui) \
   /usr/bin/rclone
 
-# Secrets repo — stores Tailscale auth key, rclone config, etc.
-$(PROJECTS)/secrets: | $(PROJECTS)
-	runuser -u $(RUN_AS_USER) -- git clone git@github.com:crdtk/secrets.git $@
-
 $(PROJECTS):
 	mkdir -p $@
 
