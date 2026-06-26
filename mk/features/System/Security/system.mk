@@ -8,9 +8,9 @@ HAS_PLX_SWITCH := $(shell lspci 2>/dev/null | grep -qiE "PLX.*PEX 87" && echo 1)
 HARDENING += \
   /etc/systemd/system/packagekit.service \
   /etc/systemd/system/suspend.target \
-  /etc/modprobe.d/blacklist-nouveau.conf \
+  $(if $(HAS_NVIDIA),/etc/modprobe.d/blacklist-nouveau.conf,) \
   /etc/modprobe.d/blacklist-parport.conf \
-  /etc/modprobe.d/nvidia-power.conf \
+  $(if $(HAS_NVIDIA),/etc/modprobe.d/nvidia-power.conf,) \
   /etc/systemd/system/openipmi.service \
   /etc/apt/preferences.d/no-snapd \
   /etc/sysctl.d/90-inotify.conf \

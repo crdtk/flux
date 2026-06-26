@@ -1,4 +1,3 @@
-SYS_SM           := $(shell nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d '.' | grep -oE '^[0-9]+')
 GPU_BDF          := $(shell lspci -D 2>/dev/null | awk '/VGA.*NVIDIA/{print $$1; exit}')
 NVCC             := /usr/local/cuda/bin/nvcc
 CUDA_LIST        := /etc/apt/sources.list.d/cuda-ubuntu$(UBUNTU_VER)-x86_64.list
@@ -7,9 +6,7 @@ CUDA_KEYRING_DEB := $(DOWNLOADS_DIR)/cuda-keyring_1.1-1_all.deb
 
 COMPUTE += \
   /usr/bin/nvidia-smi \
-  $(NVCC) \
-  /usr/bin/cmake \
-  /usr/bin/g++-14
+  $(NVCC)
 
 /usr/bin/nvidia-smi:
 	ubuntu-drivers install

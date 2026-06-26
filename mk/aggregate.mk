@@ -1,17 +1,19 @@
 # Privilege roll-up — parsed after every feature module so the accumulators
 # (HARDENING/MANAGEMENT/PKG_APPS/DISPLAY_CONFIG/COMPUTE/STORAGE, USER_FILES) are
 # complete. Branches of the IS_ROOT gate (VIII): `system` builds root artifacts,
-# `user` builds the user's. Capability senses (SYS_SM, GPU_BDF, SN8100) come from the
-# features that own them — defined before this file by the feature globs.
+# `user` builds the user's. Capability senses: HAS_NVIDIA (common.mk), GPU_BDF
+# (ParallelComputing), SN8100 below — each gates only its own hardware's targets.
 
 # ---- system (root) ----
 .PHONY: system
 
-COMPUTE_CAPABLE := $(shell [ -n "$(SYS_SM)" ] && [ "$(SYS_SM)" -ge 75 ] && echo 1)
-SN8100_PRESENT  := $(shell test -e /dev/disk/by-label/backup && echo 1)
+# Gate the GPU compute stack on GPU *presence* (HAS_NVIDIA, from lspci), not on
+# nvidia-smi: the driver install lives inside COMPUTE, so gating on the post-driver tool
+# would make a fresh NVIDIA box never install its own driver. Presence is knowable first run.
+SN8100_PRESENT := $(shell test -e /dev/disk/by-label/backup && echo 1)
 
 INSTALL := $(HARDENING) $(MANAGEMENT) $(PKG_APPS) $(DISPLAY_CONFIG) \
-           $(if $(COMPUTE_CAPABLE),$(COMPUTE),) \
+           $(if $(HAS_NVIDIA),$(COMPUTE),) \
            $(if $(SN8100_PRESENT),$(STORAGE),)
 PENDING := $(filter-out $(wildcard $(INSTALL)),$(INSTALL))
 

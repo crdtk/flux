@@ -143,9 +143,9 @@ include mk/aggregate.mk
 # Infrastructure — pattern rules and download target
 # ----------------------------------------------------------
 
-UNTRACKED_PKGS  := git avahi-daemon arp-scan nmap appmenu-gtk3-module appmenu-registrar
+UNTRACKED_PKGS  := git avahi-daemon arp-scan nmap appmenu-gtk3-module appmenu-registrar pciutils dmidecode
 LAZILY_RESOLVED := syncthing npm mc libheif-examples gwenview cockpit cockpit-files \
-                   cmake g++-14 rclone plasma-session-x11 flameshot gh plasma-widgets-addons xclip
+                   rclone plasma-session-x11 flameshot gh plasma-widgets-addons xclip
 
 /usr/bin/apt-file: | /etc/systemd/system/packagekit.service
 	$(APT) update

@@ -2,6 +2,11 @@
 # the feature globs so features may reference these (Kubuntu backports source used by
 # graphics + audiovideo; the .desktop pattern rule used by development + network).
 
+# Fleet capability sense (III): probe GPU *presence* via lspci — works on a bare box
+# before any driver exists, unlike nvidia-smi. Used by both ParallelComputing (driver +
+# CUDA) and Security (nouveau/nvidia modprobe), so it lives here, parsed before the globs.
+HAS_NVIDIA := $(shell lspci 2>/dev/null | grep -qi nvidia && echo 1)
+
 KUBUNTU_BACKPORTS_LIST := /etc/apt/sources.list.d/kubuntu-ppa-ubuntu-backports-$(UBUNTU_CODENAME).sources
 
 $(KUBUNTU_BACKPORTS_LIST):
