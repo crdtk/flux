@@ -17,6 +17,15 @@ demos/prefix-caching/kernel-metadata.json
 demos/prefix-caching/.kaggle-kernel
 demos/prefix-caching/output/
 
+# Downloaded checkpoint — generated at runtime
+demos/llm-intensive-applications/Qwen3.5-0.8B/
+
+# Shape optimizer — generated at runtime, not committed
+demos/shape-optimizer/traces/
+demos/shape-optimizer/analysis/
+demos/shape-optimizer/trials/
+demos/shape-optimizer/notebooks/out/
+
 # IDE
 .idea/
 
