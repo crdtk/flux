@@ -141,3 +141,52 @@ endef
 fix-pam-sss:
 	grep -rl pam_sss /etc/pam.d/ 2>/dev/null | xargs -r sed -i '/pam_sss/d'
 	@echo ">>> pam_sss removed from PAM"
+
+# --- Agent user ---
+# Restricted sandbox account for AI agent execution (Claude Code, vLLM, etc.)
+# Locked password — switch via: sudo su -l agent
+# GPU access via video/render groups; sudo denied unconditionally.
+
+AGENT_UID := $(shell id -u agent 2>/dev/null)
+
+MANAGEMENT += $(if $(AGENT_UID),,/home/agent)
+HARDENING  += /etc/sudoers.d/99-deny-agent \
+              /etc/security/limits.d/agent.conf
+
+define AGENT_BASHRC
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+umask 027
+endef
+
+/home/agent:
+	useradd --create-home --home-dir /home/agent \
+	  --shell /bin/bash --comment "AI Agent sandbox" \
+	  --groups video,render agent
+	usermod -L agent
+	$(file >/home/agent/.bashrc,$(AGENT_BASHRC))
+	$(file >/home/agent/.profile,$(AGENT_BASHRC))
+	chmod 750 /home/agent
+	chown -R agent:agent /home/agent
+	@echo ">>> agent: created (locked password, groups: video render)"
+
+define AGENT_SUDOERS_DENY
+# Deny sudo for agent regardless of any group membership
+agent ALL=(ALL:ALL) !ALL
+endef
+
+/etc/sudoers.d/99-deny-agent:
+	$(file >$@,$(AGENT_SUDOERS_DENY))
+	chmod 440 $@
+	@echo ">>> agent: sudo denied"
+
+define AGENT_LIMITS
+agent  hard  nproc   512
+agent  hard  nofile  4096
+agent  soft  nproc   256
+agent  soft  nofile  2048
+endef
+
+/etc/security/limits.d/agent.conf:
+	$(file >$@,$(AGENT_LIMITS))
+	@echo ">>> agent: resource limits applied (nproc=512, nofile=4096)"
