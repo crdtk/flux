@@ -7,21 +7,23 @@ Principles enforced:
   p3  — No $(shell ...) in recipes (decide at parse time)
   p4  — No exit / set -e in recipes (sense, warn, continue)
   p5  — .PHONY reserved for {system, user, clean, all}
+  p6  — No dot-targets; use real file targets or ifeq in recipe body
   p7  — No $< after order-only |
   p8  — No sudo in recipes (branch via IS_ROOT gate)
   p9  — Dependents before prerequisites; variable locality ≤ 6 lines
   p10 — .PHONY opens its section
   p12 — jq over python3/awk for structured data
   p14 — Intermediates not promoted to accumulators
-  p20 — One recipe line until proven otherwise
+  p20 — One recipe line until proven otherwise ($(file) lines excluded)
   p21 — No nested $(MAKE)
 
 Complexity score (lower is better):
-  +max(0, recipe_lines-1) per target   p20 recipe weight
+  +max(0, shell_lines-1) per target    p20 recipe weight ($(file) lines not counted)
   +locality_distance per variable      p9 locality
   +3 per python3-for-JSON usage        p12 wrong tool
   -1 per jq usage in recipes           p12 right tool reward
   +2 per extra .PHONY beyond allowed   p5 phony bloat
+  +5 per dot-target                    p6 dot-target smell
   WARN ≥ 20 · CRITICAL ≥ 50
 """
 
@@ -231,6 +233,29 @@ def p14_no_intermediates_in_accumulators(lines, logical_lines, src_map):
 
 # ── Scored checks (violations + numeric penalty) ──────────────────────────────
 
+_MAKE_BUILTINS = {
+    '.PHONY', '.DEFAULT', '.PRECIOUS', '.SECONDARY', '.SUFFIXES',
+    '.DELETE_ON_ERROR', '.IGNORE', '.SILENT', '.EXPORT_ALL_VARIABLES',
+    '.NOTPARALLEL', '.ONESHELL', '.POSIX', '.INTERMEDIATE', '.NOTINTERMEDIATE',
+}
+
+def p6_dot_targets(lines):
+    """Returns (violations, count). Penalty = 5 per dot-target.
+    Dot-targets look like file targets but produce nothing, bypassing Make's
+    dependency tracking. Use a real file target (or sentinel) instead, or an
+    ifeq condition in the recipe body of a parent target.
+    Make built-in specials (.PHONY, .DEFAULT, etc.) are excluded."""
+    violations, count = [], 0
+    for i, l in enumerate(lines, 1):
+        m = re.match(r'^(\.[a-zA-Z][^:\s]*):', l)
+        if m and m.group(1) not in _MAKE_BUILTINS:
+            violations.append(
+                f"L{i} p6 — dot-target '{m.group(1)}': use a real file target or ifeq in recipe body"
+            )
+            count += 1
+    return violations, count
+
+
 def p5_phony_discipline(lines):
     """Returns (violations, penalty). Penalty = 2 per extra .PHONY beyond allowed."""
     ALLOWED = {'all', 'system', 'user', 'clean'}
@@ -241,7 +266,7 @@ def p5_phony_discipline(lines):
             continue
         for t in m.group(1).split():
             if t not in ALLOWED:
-                violations.append(f"L{i} p5 — non-aggregate .PHONY '{t}': use dot-target instead")
+                violations.append(f"L{i} p5 — non-aggregate .PHONY '{t}': convert to real file target or ifeq in recipe body")
                 penalty += 2
     return violations, penalty
 
@@ -294,7 +319,8 @@ def p12_tool_hygiene(lines):
 
 def p20_recipe_weight(lines):
     """Returns (violations, penalty, target_count).
-    Penalty = Σ max(0, recipe_lines - 1) per target."""
+    Penalty = Σ max(0, shell_lines - 1) per target.
+    $(file ...) lines are Make functions (not shell commands) and are excluded."""
     violations, total_penalty, target_count = [], 0, 0
     current_target, current_start, recipe_buf = None, 0, []
 
@@ -303,7 +329,9 @@ def p20_recipe_weight(lines):
         if not current_target:
             return
         target_count += 1
-        substantive = [l for l in recipe_buf if l.strip()]
+        # $(file ...) is a Make function, not a shell invocation — exclude from count
+        substantive = [l for l in recipe_buf
+                       if l.strip() and not re.match(r'\t\s*\$\(file\b', l)]
         excess = max(0, len(substantive) - 1)
         if excess:
             total_penalty += excess
@@ -373,16 +401,17 @@ def main():
 
     # Scored checks
     p5_viol,  p5_pen          = p5_phony_discipline(lines)
+    p6_viol,  p6_count        = p6_dot_targets(lines)
     p9_viol,  p9_dist         = p9_variable_locality(lines)
     p12_viol, p12_wrong, p12_jq = p12_tool_hygiene(lines)
     p20_viol, p20_pen, n_tgts = p20_recipe_weight(lines)
 
-    score = max(0, p20_pen + p9_dist + 3 * p12_wrong - p12_jq + p5_pen)
+    score = max(0, p20_pen + p9_dist + 3 * p12_wrong - p12_jq + p5_pen + 5 * p6_count)
 
     checks = [
         ("p20 Recipe weight",
          p20_viol,
-         f"{n_tgts} targets · {p20_pen} excess lines"),
+         f"{n_tgts} targets · {p20_pen} excess shell lines"),
         ("p9  Locality",
          p9_viol,
          f"{len(p9_viol)} violation{'s' if len(p9_viol) != 1 else ''} · {p9_dist} lines total"),
@@ -392,6 +421,9 @@ def main():
         ("p5  PHONY discipline",
          p5_viol,
          "OK" if not p5_viol else f"{len(p5_viol)} extra beyond {{system,user,clean}}"),
+        ("p6  Dot-targets",
+         p6_viol,
+         "OK" if not p6_viol else f"{p6_count} dot-target{'s' if p6_count != 1 else ''}"),
     ]
 
     # Structural checks (no score contribution, but must be clean)

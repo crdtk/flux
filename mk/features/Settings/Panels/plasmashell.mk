@@ -1,8 +1,6 @@
 ifndef _PLASMASHELL_MK
 _PLASMASHELL_MK := 1
 
-APPLETSRC := $(USER_HOME)/.config/plasma-org.kde.plasma.desktop-appletsrc
-
 ## Removes all top/bottom panel containments from appletsrc, then restarts plasmashell.
 ## evaluateScript panel.remove() is deferred and plasmashell restores from appletsrc via KConfig
 ## file watchers — JS cannot reliably delete panels. Editing the file is the authoritative fix.
@@ -28,16 +26,19 @@ with open(path, 'w') as f:
 endef
 export STRIP_PANELS_PY
 
-.PHONY: .reset-panels .ensure-plasmashell
+APPLETSRC := $(USER_HOME)/.config/plasma-org.kde.plasma.desktop-appletsrc
+
+## Operational maintenance — call explicitly: make reset-panels / make ensure-plasmashell
+.PHONY: reset-panels ensure-plasmashell
 
 ## Strips panel entries from appletsrc and restarts plasmashell so it reads clean config.
-.reset-panels:
+reset-panels:
 	@python3 -c "$$STRIP_PANELS_PY" $(APPLETSRC) 2>/dev/null || true
 	@systemctl --user restart plasma-plasmashell.service
 	@until systemctl --user is-active plasma-plasmashell.service >/dev/null 2>&1; do sleep 1; done
 	@echo ">>> plasmashell restarted with clean panel config"
 
-.ensure-plasmashell:
+ensure-plasmashell:
 	@systemctl --user is-active plasma-plasmashell.service >/dev/null 2>&1 || \
 	  (systemctl --user reset-failed plasma-plasmashell.service 2>/dev/null || true; \
 	   systemctl --user start plasma-plasmashell.service && \
