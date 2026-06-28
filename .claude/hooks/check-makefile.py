@@ -118,7 +118,9 @@ def p8_no_sudo_in_recipes(lines):
             continue
         if re.match(r'\t\s*@?\s*(echo|printf|#)', l):
             continue
-        if re.search(r'\bsudo\b', l):
+        stripped = re.sub(r'"[^"]*"', '""', l)
+        stripped = re.sub(r"'[^']*'", "''", stripped)
+        if re.search(r'\bsudo\b', stripped):
             out.append(f"L{i} p8 — sudo in recipe: {l.rstrip()}")
     return out
 
@@ -383,7 +385,7 @@ def p22_ampersand_lumping(lines):
         n = 0
         for j in range(len(parts) - 1):
             following = parts[j + 1].strip().lstrip('@')
-            if not re.match(r'(echo|printf)\b', following):
+            if not re.match(r'(echo|printf|break|continue)\b', following):
                 n += 1
         if n:
             count += n

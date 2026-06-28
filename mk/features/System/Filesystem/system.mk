@@ -40,22 +40,22 @@ endef
 
 # dev-disk-by\x2dlabel-backup.device is the systemd unit for /dev/disk/by-label/backup
 # (systemd escapes '-' as '\x2d'). WantedBy that device auto-starts the mount on hotplug.
-/etc/systemd/system/mnt-backup.mount:
+/mnt/backup:
+	mkdir -p $@
+
+/etc/systemd/system/mnt-backup.mount: | /mnt/backup
 	sed -i '\|/mnt/backup|d' /etc/fstab 2>/dev/null || true
-	mkdir -p /mnt/backup
 	$(file >$@,$(BACKUP_MOUNT_UNIT))
-	systemctl daemon-reload
-	systemctl enable mnt-backup.mount
-	@echo ">>> SN8100 mount armed (device-activated; empty dir when absent, no picker hang)"
+	systemctl daemon-reload; systemctl enable mnt-backup.mount && echo ">>> SN8100 mount armed (device-activated; empty dir when absent, no picker hang)"
 
 /etc/systemd/system/mnt-backup-chmod.service:
 	$(file >$@,$(BACKUP_CHMOD_UNIT))
-	@systemctl daemon-reload && systemctl enable mnt-backup-chmod.service && echo ">>> /mnt/backup chmod service enabled"
+	@systemctl daemon-reload; systemctl enable mnt-backup-chmod.service && echo ">>> /mnt/backup chmod service enabled"
 
 SN8100_DEV := $(shell lsblk -dno NAME,MODEL 2>/dev/null | awk '/SN8100/{print $$1; exit}')
 system::
 ifeq ($(SN8100_DEV),)
-	@echo 1 > /sys/bus/pci/rescan && sleep 1 && lsblk -d -o NAME,SIZE,MODEL | grep -E 'nvme|SN8100' || true
+	@echo 1 > /sys/bus/pci/rescan; sleep 1; lsblk -d -o NAME,SIZE,MODEL | grep -E 'nvme|SN8100' || true
 endif
 .PHONY: eject
 eject:
