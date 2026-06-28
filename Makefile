@@ -96,6 +96,18 @@
 #       independent capabilities; prerequisites declare invariants. If removing Y would
 #       leave X broken or unsafe, Y belongs on X's prerequisite line, not in the
 #       accumulator.
+# XIX.  THERE IS NOWHERE BEYOND. The Makefile is the only interface; this directory is
+#       its boundary. Solutions live in `make <target>` — never in standalone scripts
+#       or entry points installed outside this tree. The Makefile may write system
+#       configuration (sudoers, services, modprobe) and packages to system paths —
+#       that is its job. It must not install workflow artifacts (wrappers, launchers,
+#       convenience scripts) whose sole purpose is making a make target callable from
+#       elsewhere. When something needs to be callable from anywhere, emit a shell
+#       alias into ~/.bashrc via a make target. Do not reach beyond.
+# XX.   SIMPLEST RECIPE FIRST. A recipe is one bash command until there is a demonstrated
+#       reason for two. No wrappers, no indirection, no helper files, no intermediate
+#       variables unless the problem demands them. Complexity must be justified by a
+#       concrete failure of the simpler form — not by anticipating one.
 #
 # ==========================================================
 

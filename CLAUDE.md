@@ -34,6 +34,7 @@ Check these before asking about specs or compatibility of owned hardware.
 
 ## Workflow
 - **Never give raw bash commands as solutions.** Every repeatable action must be a Makefile target. If a solution requires shell commands, write the target first, then tell the user to run `make <target>`.
+- **There is nowhere beyond.** The Makefile is the only interface, and this directory is its boundary. Solutions live in `make <target>` — never in standalone scripts or entry points installed outside this tree. The Makefile may install system configuration (sudoers, services, modprobe) and packages to system paths; it must not install workflow artifacts (wrappers, launchers, convenience scripts) whose only purpose is to make a make target callable from elsewhere. If something needs to be callable from anywhere, emit a shell alias into `~/.bashrc` via a make target. Do not reach beyond.
 
 ## Project Scope
 Local LLM inference **workstation** reusing existing DDR4 SODIMMs to offset high memory prices.
