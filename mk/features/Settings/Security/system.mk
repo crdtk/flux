@@ -7,7 +7,7 @@ ALL ALL=(ai-agent) NOPASSWD: SETENV: /usr/local/bin/claude
 endef
 
 .PHONY: claude-safe
-claude-safe: /etc/sudoers.d/50-claude-safe  
+claude-safe: /etc/sudoers.d/50-claude-safe
 	sudo -u ai-agent CLAUDE_CONFIG_DIR="$(HOME)/.claude" claude
 
 /etc/sudoers.d/50-claude-safe: /home/ai-agent
