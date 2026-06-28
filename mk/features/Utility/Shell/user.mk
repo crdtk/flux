@@ -34,7 +34,7 @@ SSH_CONFIG := $(USER_HOME)/.ssh/config
 USER_FILES += $(USER_HOME)/.ssh/authorized_keys $(SSH_CONFIG)
 
 $(USER_HOME)/.ssh/authorized_keys: $(SSH_KEY)
-	@cat $(SSH_KEY).pub >> $@ && chmod 600 $@ && echo ">>> SSH key authorized for localhost"
+	@cat $(SSH_KEY).pub >> $@; chmod 600 $@ && echo ">>> SSH key authorized for localhost"
 
 $(USER_HOME)/.ssh/:
 	mkdir -p $@

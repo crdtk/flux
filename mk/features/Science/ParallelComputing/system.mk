@@ -9,7 +9,7 @@ COMPUTE += /usr/bin/nvidia-smi $(NVCC)
 CUDA_LIST := /etc/apt/sources.list.d/cuda-ubuntu$(UBUNTU_VER)-x86_64.list
 CUDA_PKG  ?= cuda-toolkit
 $(NVCC): | $(CUDA_LIST)
-	@$(APT) update && $(APT) install -y $(CUDA_PKG)
+	@$(APT) update; $(APT) install -y $(CUDA_PKG)
 
 CUDA_KEYRING_DEB := $(DOWNLOADS_DIR)/cuda-keyring_1.1-1_all.deb
 $(CUDA_LIST): $(CUDA_KEYRING_DEB)

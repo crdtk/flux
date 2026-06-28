@@ -1,5 +1,3 @@
-SDDM_LAST_SESSION := $(wildcard /var/lib/sddm/state.conf)
-
 PKG_APPS += \
   /usr/share/plasma/plasmoids/org.kde.plasma.weather/metadata.json \
   /etc/sddm.conf.d/30-x11-session.conf
@@ -10,6 +8,7 @@ define SDDM_X11_CONF
 Session=plasmax11
 endef
 
+SDDM_LAST_SESSION := $(wildcard /var/lib/sddm/state.conf)
 /etc/sddm.conf.d/30-x11-session.conf: /usr/share/xsessions/plasmax11.desktop
 	sed -i '/^Session=plasma$$/d' /etc/sddm.conf
 ifneq ($(SDDM_LAST_SESSION),)

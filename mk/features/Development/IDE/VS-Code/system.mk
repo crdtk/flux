@@ -12,5 +12,4 @@ PKG_APPS += /usr/share/applications/code.desktop
 	echo 'deb [arch=amd64 signed-by=$<] https://packages.microsoft.com/repos/code stable main' > $@
 
 /usr/share/keyrings/microsoft.gpg:
-	mkdir -p $(dir $@)
-	curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > $@
+	mkdir -p $(dir $@); curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > $@

@@ -63,7 +63,7 @@ ST_GUI_REMOTE_OK := $(shell grep -ql '0\.0\.0\.0:8384' $(ST_CONFIG_XML) $(ST_STA
 ST_API_RETRIES   = 30
 RUN_AS_UID      := $(shell id -u $(RUN_AS_USER))
 $(USER_HOME)/.config/systemd/user/default.target.wants/syncthing.service: /usr/bin/syncthing
-	@loginctl enable-linger $(RUN_AS_USER) && runuser -u $(RUN_AS_USER) -- env XDG_RUNTIME_DIR=/run/user/$(RUN_AS_UID) systemctl --user enable --now syncthing && echo ">>> Syncthing enabled"
+	@loginctl enable-linger $(RUN_AS_USER); runuser -u $(RUN_AS_USER) -- env XDG_RUNTIME_DIR=/run/user/$(RUN_AS_UID) systemctl --user enable --now syncthing && echo ">>> Syncthing enabled"
 ifeq ($(ST_GUI_REMOTE_OK),)
-	@echo ">>> Waiting for Syncthing API..." && for i in $$(seq $(ST_API_RETRIES)); do curl -sf $(ST_API_URL)/rest/noauth/health >/dev/null 2>&1 && break || sleep 1; done && curl -sS -X PATCH $(ST_API_URL)/rest/config/gui -H "X-API-Key: $(ST_API_KEY)" -H "Content-Type: application/json" -d '$(ST_GUI_JSON)' && echo ">>> Syncthing GUI remote enabled"
+	@echo ">>> Waiting for Syncthing API..."; for i in $$(seq $(ST_API_RETRIES)); do curl -sf $(ST_API_URL)/rest/noauth/health >/dev/null 2>&1 && break || sleep 1; done; curl -sS -X PATCH $(ST_API_URL)/rest/config/gui -H "X-API-Key: $(ST_API_KEY)" -H "Content-Type: application/json" -d '$(ST_GUI_JSON)' && echo ">>> Syncthing GUI remote enabled"
 endif

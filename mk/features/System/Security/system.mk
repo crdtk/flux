@@ -95,4 +95,4 @@ PLX_ASPM_TARGETS := $(PLX_UPSTREAM) $(PLX_DOWNSTREAMS) $(PLX_GPU)
 # Cleans up the old script file if upgrading from a previous version.
 /etc/systemd/system/disable-gpu-aspm.service:
 	$(file >$@,$(DISABLE_GPU_ASPM_UNIT))
-	@rm -f /usr/local/sbin/disable-gpu-aspm && systemctl daemon-reload && systemctl enable --now disable-gpu-aspm.service && echo ">>> ASPM L1 cleared on all $(words $(PLX_ASPM_TARGETS)) switch ports"
+	@rm -f /usr/local/sbin/disable-gpu-aspm; systemctl daemon-reload; systemctl enable --now disable-gpu-aspm.service && echo ">>> ASPM L1 cleared on all $(words $(PLX_ASPM_TARGETS)) switch ports"

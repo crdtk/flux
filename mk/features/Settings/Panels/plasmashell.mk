@@ -28,21 +28,18 @@ export STRIP_PANELS_PY
 
 APPLETSRC := $(USER_HOME)/.config/plasma-org.kde.plasma.desktop-appletsrc
 
-## Operational maintenance — call explicitly: make reset-panels / make ensure-plasmashell
-.PHONY: reset-panels ensure-plasmashell
+## Operational maintenance — call explicitly: make reset-panels
+.PHONY: reset-panels
 
 ## Strips panel entries from appletsrc and restarts plasmashell so it reads clean config.
 reset-panels:
 	@python3 -c "$$STRIP_PANELS_PY" $(APPLETSRC) 2>/dev/null || true
-	@systemctl --user restart plasma-plasmashell.service
-	@until systemctl --user is-active plasma-plasmashell.service >/dev/null 2>&1; do sleep 1; done
-	@echo ">>> plasmashell restarted with clean panel config"
+	@systemctl --user restart plasma-plasmashell.service; until systemctl --user is-active plasma-plasmashell.service >/dev/null 2>&1; do sleep 1; done && echo ">>> plasmashell restarted with clean panel config"
 
-ensure-plasmashell:
-	@systemctl --user is-active plasma-plasmashell.service >/dev/null 2>&1 || \
-	  (systemctl --user reset-failed plasma-plasmashell.service 2>/dev/null || true; \
-	   systemctl --user start plasma-plasmashell.service && \
-	   until systemctl --user is-active plasma-plasmashell.service >/dev/null 2>&1; do sleep 1; done; \
-	   echo ">>> plasmashell started")
+PLASMASHELL_ACTIVE := $(shell systemctl --user is-active plasma-plasmashell.service 2>/dev/null)
+user::
+ifeq ($(PLASMASHELL_ACTIVE),inactive)
+	@systemctl --user reset-failed plasma-plasmashell.service 2>/dev/null || true; systemctl --user start plasma-plasmashell.service; until systemctl --user is-active plasma-plasmashell.service >/dev/null 2>&1; do sleep 1; done && echo ">>> plasmashell started"
+endif
 
 endif

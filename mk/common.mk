@@ -19,5 +19,4 @@ $(KUBUNTU_BACKPORTS_LIST):
 
 # DESKTOP_PKG_<name> / DESKTOP_FLAGS_<name> live in the owning feature (III).
 /usr/share/applications/%.desktop:
-	test -f $@ || $(APT) install -y --reinstall $(DESKTOP_PKG_$*)
-	sed -i 's|^\(Exec=[^ ]*\)|\1 $(DESKTOP_FLAGS_$*)|g' $@
+	test -f $@ || $(APT) install -y --reinstall $(DESKTOP_PKG_$*); sed -i 's|^\(Exec=[^ ]*\)|\1 $(DESKTOP_FLAGS_$*)|g' $@
