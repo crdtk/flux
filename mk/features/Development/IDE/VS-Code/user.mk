@@ -7,42 +7,27 @@ USER_FILES      += $(VSCODE_SETTINGS)
 $(VSCODE_SETTINGS):
 	@mkdir -p $(dir $@) && { test -f $@ || printf '{}' > $@; } && jq '. + {"python.defaultInterpreterPath": "$${workspaceFolder}/.venv/bin/python"}' $@ > $@.tmp && mv $@.tmp $@ && echo ">>> .vscode/settings.json: defaultInterpreterPath set"
 
-# Sentinel files record extension installs so Make can track them as real targets.
-# Pattern: detection var + conditional USER_FILES + sentinel target, all clustered.
-VSCODE_EXT_DIR := $(USER_HOME)/.local/share/make/vscode-ext
-
-$(VSCODE_EXT_DIR):
-	mkdir -p $@
-
-VSCODE_PYTHON_OK := $(shell ls $(USER_HOME)/.vscode/extensions 2>/dev/null | grep -c '^ms-python.python-')
-USER_FILES       += $(if $(filter 0,$(VSCODE_PYTHON_OK)),$(VSCODE_EXT_DIR)/ms-python.python,)
-
-$(VSCODE_EXT_DIR)/ms-python.python: | $(VSCODE_EXT_DIR)
-	@code --install-extension ms-python.python && touch $@ && echo ">>> VS Code: Python extension installed"
-
-VSCODE_JUPYTER_OK := $(shell ls $(USER_HOME)/.vscode/extensions 2>/dev/null | grep -c '^ms-toolsai.jupyter-')
-USER_FILES        += $(if $(filter 0,$(VSCODE_JUPYTER_OK)),$(VSCODE_EXT_DIR)/ms-toolsai.jupyter,)
-
-$(VSCODE_EXT_DIR)/ms-toolsai.jupyter: | $(VSCODE_EXT_DIR)
-	@code --install-extension ms-toolsai.jupyter && touch $@ && echo ">>> VS Code: Jupyter extension installed"
-
+user::
+VSCODE_PYTHON_OK     := $(shell ls $(USER_HOME)/.vscode/extensions 2>/dev/null | grep -c '^ms-python.python-')
+ifeq ($(VSCODE_PYTHON_OK),0)
+	@code --install-extension ms-python.python && echo ">>> VS Code: Python extension installed"
+endif
+VSCODE_JUPYTER_OK    := $(shell ls $(USER_HOME)/.vscode/extensions 2>/dev/null | grep -c '^ms-toolsai.jupyter-')
+ifeq ($(VSCODE_JUPYTER_OK),0)
+	@code --install-extension ms-toolsai.jupyter && echo ">>> VS Code: Jupyter extension installed"
+endif
 VSCODE_REMOTE_SSH_OK := $(shell ls $(USER_HOME)/.vscode/extensions 2>/dev/null | grep -c '^ms-vscode-remote.remote-ssh-')
-USER_FILES           += $(if $(filter 0,$(VSCODE_REMOTE_SSH_OK)),$(VSCODE_EXT_DIR)/ms-vscode-remote.remote-ssh,)
-
-$(VSCODE_EXT_DIR)/ms-vscode-remote.remote-ssh: | $(VSCODE_EXT_DIR)
-	@code --install-extension ms-vscode-remote.remote-ssh && touch $@ && echo ">>> VS Code: Remote SSH extension installed"
-
-VSCODE_COLAB_OK := $(shell ls $(USER_HOME)/.vscode/extensions 2>/dev/null | grep -c '^google.colab-')
-USER_FILES      += $(if $(filter 0,$(VSCODE_COLAB_OK)),$(VSCODE_EXT_DIR)/google.colab,)
-
-$(VSCODE_EXT_DIR)/google.colab: | $(VSCODE_EXT_DIR)
-	@code --install-extension Google.colab && touch $@ && echo ">>> VS Code: Google Colab extension installed"
-
-VSCODE_GITMSG_OK := $(shell ls $(USER_HOME)/.vscode/extensions 2>/dev/null | grep -c '^businessaddonscom.gitmessagegenerator-')
-USER_FILES       += $(if $(filter 0,$(VSCODE_GITMSG_OK)),$(VSCODE_EXT_DIR)/businessaddonscom.gitmessagegenerator,)
-
-$(VSCODE_EXT_DIR)/businessaddonscom.gitmessagegenerator: | $(VSCODE_EXT_DIR)
-	@code --install-extension BusinessAddonscom.gitmessagegenerator && touch $@ && echo ">>> VS Code: gitMessageGenerator extension installed"
+ifeq ($(VSCODE_REMOTE_SSH_OK),0)
+	@code --install-extension ms-vscode-remote.remote-ssh && echo ">>> VS Code: Remote SSH extension installed"
+endif
+VSCODE_COLAB_OK      := $(shell ls $(USER_HOME)/.vscode/extensions 2>/dev/null | grep -c '^google.colab-')
+ifeq ($(VSCODE_COLAB_OK),0)
+	@code --install-extension Google.colab && echo ">>> VS Code: Google Colab extension installed"
+endif
+VSCODE_GITMSG_OK     := $(shell ls $(USER_HOME)/.vscode/extensions 2>/dev/null | grep -c '^businessaddonscom.gitmessagegenerator-')
+ifeq ($(VSCODE_GITMSG_OK),0)
+	@code --install-extension BusinessAddonscom.gitmessagegenerator && echo ">>> VS Code: gitMessageGenerator extension installed"
+endif
 
 # OPENCODE_ZEN_KEY comes from the environment (Make auto-imports env vars).
 VSCODE_USER_SETTINGS := $(USER_HOME)/.config/Code/User/settings.json

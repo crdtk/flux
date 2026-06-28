@@ -2,11 +2,10 @@ BASHRC := $(USER_HOME)/.bashrc
 
 MAKE_COMPLETION    := /usr/share/bash-completion/completions/make
 MAKE_COMPLETION_OK := $(shell grep -c 'bash-completion/completions/make' $(BASHRC) 2>/dev/null)
-MAKE_COMPLETION_SENTINEL := $(USER_HOME)/.local/share/make/bash-completion
-USER_FILES               += $(if $(filter 0,$(MAKE_COMPLETION_OK)),$(MAKE_COMPLETION_SENTINEL),)
-
-$(MAKE_COMPLETION_SENTINEL):
-	@printf 'source %s\n' '$(MAKE_COMPLETION)' >> $(BASHRC) && mkdir -p $(dir $@) && touch $@ && echo ">>> Make autocomplete enabled"
+user::
+ifeq ($(MAKE_COMPLETION_OK),0)
+	@printf 'source %s\n' '$(MAKE_COMPLETION)' >> $(BASHRC) && echo ">>> Make autocomplete enabled"
+endif
 
 USER_FILES += $(USER_HOME)/.config/kwalletrc
 

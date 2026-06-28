@@ -324,9 +324,13 @@ def p20_recipe_weight(lines):
     violations, total_penalty, target_count = [], 0, 0
     current_target, current_start, recipe_buf = None, 0, []
 
+    _EXEMPT = {'all', 'system', 'user', 'clean'}
+
     def flush():
         nonlocal total_penalty, target_count
         if not current_target:
+            return
+        if current_target in _EXEMPT:
             return
         target_count += 1
         # $(file ...) is a Make function, not a shell invocation — exclude from count
