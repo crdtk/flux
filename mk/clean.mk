@@ -28,6 +28,7 @@ else
 	rm -f $(USER_HOME)/.local/share/applications/pycharm-community.desktop
 	rm -f $(USER_HOME)/.config/kwalletrc
 	rm -f $(USER_HOME)/.config/autostart/enable-*.desktop
+	rm -rf $(USER_HOME)/.local/share/jupyter/kernels/turboquant
 	kpackagetool6 -t Plasma/Applet -r com.github.antroids.application-title-bar 2>/dev/null || true
 	kpackagetool6 -t Plasma/Applet -r Plasma.Flex.Hub 2>/dev/null || true
 	kpackagetool6 -t Plasma/Applet -r com.github.chrtall.kppleMenu 2>/dev/null || true

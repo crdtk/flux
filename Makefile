@@ -169,7 +169,7 @@ INSTALL := $(HARDENING) $(MANAGEMENT) $(PKG_APPS) $(DISPLAY_CONFIG) \
            $(if $(SN8100_PRESENT),$(STORAGE),)
 PENDING := $(filter-out $(wildcard $(INSTALL)),$(INSTALL))
 
-system: $(PENDING)
+system:: $(PENDING)
 	update-initramfs -u
 	$(APT) autoremove
 
@@ -255,9 +255,6 @@ $(TQ_KERNEL): $(VENV_PY)
 demo-notebook: | $(TQ_KERNEL)
 	cd demos/prefix-caching && $(VENV)/bin/jupyter notebook prefix_caching_demo.ipynb
 
-.PHONY: demo-clean
-demo-clean:
-	rm -rf $(USER_HOME)/.local/share/jupyter/kernels/turboquant
 
 .PHONY: colab-upload
 colab-upload: $(COLAB_NB)

@@ -52,14 +52,11 @@ endef
 	$(file >$@,$(BACKUP_CHMOD_UNIT))
 	@systemctl daemon-reload && systemctl enable mnt-backup-chmod.service && echo ">>> /mnt/backup chmod service enabled"
 
-# Operational maintenance — call explicitly: make detect-sn8100 / make eject
-.PHONY: detect-sn8100
-detect-sn8100:
-	@echo 1 > /sys/bus/pci/rescan
-	@sleep 1
-	@lsblk -d -o NAME,SIZE,MODEL | grep -E 'nvme|SN8100' || true
-
 SN8100_DEV := $(shell lsblk -dno NAME,MODEL 2>/dev/null | awk '/SN8100/{print $$1; exit}')
+system::
+ifeq ($(SN8100_DEV),)
+	@echo 1 > /sys/bus/pci/rescan && sleep 1 && lsblk -d -o NAME,SIZE,MODEL | grep -E 'nvme|SN8100' || true
+endif
 .PHONY: eject
 eject:
 	@if [ -n "$(SN8100_DEV)" ]; then \
