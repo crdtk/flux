@@ -34,6 +34,7 @@ Check these before asking about specs or compatibility of owned hardware.
 
 ## Workflow
 - **Never give raw bash commands as solutions.** Every repeatable action must be a Makefile target. If a solution requires shell commands, write the target first, then tell the user to run `make <target>`.
+- **Single-level prerequisites (dependency chain decomposition).** Each target declares only its immediate predecessor — never the full transitive chain. `A: B`, `B: C`, `C: D` — not `A: B C D`. This encodes causality: you can't write a sudoers rule for a user that doesn't exist, and you can't create a user for a binary that isn't installed. Flat prerequisite lists hide the ordering logic that the chain makes explicit.
 - **There is nowhere beyond.** The Makefile is the only interface, and this directory is its boundary. Solutions live in `make <target>` — never in standalone scripts or entry points installed outside this tree. The Makefile may install system configuration (sudoers, services, modprobe) and packages to system paths; it must not install workflow artifacts (wrappers, launchers, convenience scripts) whose only purpose is to make a make target callable from elsewhere. If something needs to be callable from anywhere, emit a shell alias into `~/.bashrc` via a make target. Do not reach beyond.
 
 ## Project Scope

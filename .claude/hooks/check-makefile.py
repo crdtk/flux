@@ -14,17 +14,22 @@ Principles enforced:
   p10 — .PHONY opens its section
   p12 — jq over python3/awk for structured data
   p14 — Intermediates not promoted to accumulators
-  p20 — One recipe line until proven otherwise ($(file) lines excluded)
+  p20 — One real recipe line per target ($(file) and echo/printf lines excluded)
   p21 — No nested $(MAKE)
+  p22 — No && lumping between non-echo commands; use prerequisite chains instead
 
 Complexity score (lower is better):
-  +max(0, shell_lines-1) per target    p20 recipe weight ($(file) lines not counted)
+  +max(0, real_lines-1) per target     p20 recipe weight ($(file), echo, printf excluded)
   +locality_distance per variable      p9 locality
   +3 per python3-for-JSON usage        p12 wrong tool
   -1 per jq usage in recipes           p12 right tool reward
   +2 per extra .PHONY beyond allowed   p5 phony bloat
   +5 per dot-target                    p6 dot-target smell
+  +1 per && between non-echo commands  p22 decomposition pressure
   WARN ≥ 20 · CRITICAL ≥ 50
+
+p20 + p22 together favour dependency chain decomposition: the only way to satisfy
+both is a single atomic command per target (with optional trailing && echo status).
 """
 
 import json, sys, re, os
@@ -333,9 +338,11 @@ def p20_recipe_weight(lines):
         if current_target in _EXEMPT:
             return
         target_count += 1
-        # $(file ...) is a Make function, not a shell invocation — exclude from count
+        # $(file ...) is a Make function; echo/printf are status reporting — neither counts
         substantive = [l for l in recipe_buf
-                       if l.strip() and not re.match(r'\t\s*\$\(file\b', l)]
+                       if l.strip()
+                       and not re.match(r'\t\s*\$\(file\b', l)
+                       and not re.match(r'\t\s*@?\s*(echo|printf)\b', l)]
         excess = max(0, len(substantive) - 1)
         if excess:
             total_penalty += excess
@@ -360,6 +367,30 @@ def p20_recipe_weight(lines):
                 recipe_buf     = []
     flush()
     return violations, total_penalty, target_count
+
+
+def p22_ampersand_lumping(lines):
+    """Returns (violations, count). Penalty = +1 per && connecting non-echo commands.
+    cmd && echo/printf is exempt — status reporting is not decomposable into a prereq.
+    Every other && is a signal of a missing prerequisite chain."""
+    violations, count = [], 0
+    for i, l in enumerate(lines, 1):
+        if not l.startswith('\t'):
+            continue
+        stripped = re.sub(r'"[^"]*"', '""', l)
+        stripped = re.sub(r"'[^']*'", "''", stripped)
+        parts = re.split(r'&&', stripped)
+        n = 0
+        for j in range(len(parts) - 1):
+            following = parts[j + 1].strip().lstrip('@')
+            if not re.match(r'(echo|printf)\b', following):
+                n += 1
+        if n:
+            count += n
+            violations.append(
+                f"L{i} p22 — {n} && lump{'s' if n > 1 else ''}: decompose into prerequisite chain"
+            )
+    return violations, count
 
 
 # ── Report ─────────────────────────────────────────────────────────────────────
@@ -404,18 +435,22 @@ def main():
     logical_lines, src_map = resolve_continuations(lines)
 
     # Scored checks
-    p5_viol,  p5_pen          = p5_phony_discipline(lines)
-    p6_viol,  p6_count        = p6_dot_targets(lines)
-    p9_viol,  p9_dist         = p9_variable_locality(lines)
+    p5_viol,  p5_pen            = p5_phony_discipline(lines)
+    p6_viol,  p6_count          = p6_dot_targets(lines)
+    p9_viol,  p9_dist           = p9_variable_locality(lines)
     p12_viol, p12_wrong, p12_jq = p12_tool_hygiene(lines)
-    p20_viol, p20_pen, n_tgts = p20_recipe_weight(lines)
+    p20_viol, p20_pen, n_tgts   = p20_recipe_weight(lines)
+    p22_viol, p22_count         = p22_ampersand_lumping(lines)
 
-    score = max(0, p20_pen + p9_dist + 3 * p12_wrong - p12_jq + p5_pen + 5 * p6_count)
+    score = max(0, p20_pen + p9_dist + 3 * p12_wrong - p12_jq + p5_pen + 5 * p6_count + p22_count)
 
     checks = [
         ("p20 Recipe weight",
          p20_viol,
-         f"{n_tgts} targets · {p20_pen} excess shell lines"),
+         f"{n_tgts} targets · {p20_pen} excess lines"),
+        ("p22 && lumping",
+         p22_viol,
+         f"0 lumps" if not p22_count else f"{p22_count} && lump{'s' if p22_count != 1 else ''}"),
         ("p9  Locality",
          p9_viol,
          f"{len(p9_viol)} violation{'s' if len(p9_viol) != 1 else ''} · {p9_dist} lines total"),
