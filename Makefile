@@ -178,12 +178,9 @@ system: $(PENDING)
 
 USER_PENDING := $(filter-out $(wildcard $(USER_FILES)),$(USER_FILES))
 
-user: $(USER_PENDING) \
+user:: $(USER_PENDING) \
     configure-top-panel \
-    configure-bottom-panel \
-    configure-panels \
-    configure-shell \
-    configure-vscode
+    configure-bottom-panel
 	/usr/bin/kbuildsycoca6
 	@systemctl --user reset-failed plasma-plasmashell.service 2>/dev/null || true
 	@systemctl --user restart plasma-plasmashell.service 2>/dev/null || true
