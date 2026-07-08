@@ -1,11 +1,15 @@
+# kickerdash is the sentinel plasma-widgets-addons actually ships a
+# metadata.json for (verified via dpkg -L — the weather applet is a compiled
+# plugin with no metadata.json). Display-manager session defaults are owned by
+# the POST system (post/post.pl, SELECTION section), which keeps GDM, SDDM and
+# LightDM all standby-ready instead of forcing one of them.
 PKG_APPS += \
-  /usr/share/plasma/plasmoids/org.kde.plasma.weather/metadata.json \
-  /etc/sddm.conf.d/30-x11-session.conf \
+  /usr/share/plasma/plasmoids/org.kde.plasma.kickerdash/metadata.json \
   /usr/share/wayland-sessions/lomiri.desktop
 
 ## Lomiri (Unity 8 successor, Mir-based Wayland compositor) — install and register as a session.
 /usr/share/wayland-sessions/lomiri.desktop:
-	$(APT) install -y lomiri && echo ">>> Lomiri installed — select it at the SDDM greeter (Wayland)"
+	$(APT) install -y lomiri && echo ">>> Lomiri installed — select it at the greeter (Wayland)"
 
 ## Kill the stuck Unity session so SDDM reclaims the greeter.
 .PHONY: kill-unity-session
@@ -14,33 +18,3 @@ kill-unity-session:
 	pkill -u m cinnamon-session 2>/dev/null || true
 	pkill -u m compiz 2>/dev/null || true
 
-## Restore SDDM as active display manager after a competing DM (e.g. lightdm from unity) took over.
-.PHONY: reconfigure-display-manager
-reconfigure-display-manager:
-	echo "/usr/bin/sddm" > /etc/X11/default-display-manager
-	DEBIAN_FRONTEND=noninteractive dpkg-reconfigure sddm
-	systemctl disable lightdm 2>/dev/null || true
-	systemctl enable sddm
-	systemctl reset-failed sddm 2>/dev/null || true
-	systemctl start sddm && echo ">>> SDDM started"
-
-## Global menu needs X11 — KWin on Wayland lacks the appmenu protocol (Qt, GTK and Electron alike).
-## DisplayServer=x11 overrides 10-wayland.conf (kwin_wayland greeter) which leaks WAYLAND_DISPLAY
-## into the session environment, causing plasmashell/kscreen-doctor to pick the wayland Qt platform
-## plugin, fail to connect (no compositor running), and crash with qFatal on every login.
-define SDDM_X11_CONF
-[General]
-DisplayServer=x11
-
-[Autologin]
-Session=plasmax11
-endef
-
-SDDM_LAST_SESSION := $(wildcard /var/lib/sddm/state.conf)
-/etc/sddm.conf.d/30-x11-session.conf: /usr/share/xsessions/plasmax11.desktop
-	sed -i '/^Session=plasma$$/d' /etc/sddm.conf
-ifneq ($(SDDM_LAST_SESSION),)
-	sed -i 's|^Session=.*|Session=$<|' $(SDDM_LAST_SESSION)
-endif
-	$(file >$@,$(SDDM_X11_CONF))
-	@echo ">>> SDDM boots Plasma (X11) — global menu active after next login"

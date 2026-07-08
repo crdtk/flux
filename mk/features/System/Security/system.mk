@@ -11,10 +11,10 @@ HARDENING += \
 	@rm -f /etc/apt/sources.list.d/jammy-backports.list; systemctl disable --now ollama touchegg 2>/dev/null || true; $(APT) purge -y ollama touchegg cockpit-packagekit 2>/dev/null || true; rm -f /usr/local/bin/ollama /etc/systemd/system/ollama.service; systemctl stop packagekit 2>/dev/null || true; systemctl mask packagekit; mkdir -p /etc/PackageKit; dpkg-divert --divert /etc/PackageKit/20packagekit.distrib --rename /etc/apt/apt.conf.d/20packagekit 2>/dev/null || true; systemctl daemon-reload && echo ">>> debloat complete"
 
 /etc/sysctl.d/90-inotify.conf:
-	@printf 'fs.inotify.max_user_watches=524288\n' > $@ && sysctl -p $@ && echo ">>> inotify watches: 524288"
+	@printf 'fs.inotify.max_user_watches=524288\nfs.inotify.max_queued_events=131072\nfs.inotify.max_user_instances=4096\n' > $@ && sysctl -p $@ && echo ">>> inotify limits raised (watches/events/instances)"
 
 /etc/apt/preferences.d/no-snapd:
-	@mkdir -p $(dir $@); snap list --all 2>/dev/null | awk 'NR>1{print $$1}' | xargs -r snap remove --purge 2>/dev/null || true; $(APT) purge -y snapd 2>/dev/null || true; rm -rf /snap /var/snap /var/lib/snapd /var/cache/snapd ~/snap; printf 'Package: snapd\nPin: release *\nPin-Priority: -1\n' > $@ && echo ">>> snap purged and pinned out"
+	@mkdir -p $(dir $@); snap list --all 2>/dev/null | awk 'NR>1{print $$1}' | xargs -r snap remove --purge 2>/dev/null || true; $(APT) purge -y snapd 2>/dev/null || true; rm -rf /snap /var/snap /var/lib/snapd /var/cache/snapd ~/snap; printf 'Package: snapd\nPin: release a=*\nPin-Priority: -1\n' > $@ && echo ">>> snap purged and pinned out"
 
 /etc/systemd/system/suspend.target:
 	@systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target && echo ">>> Suspend disabled"

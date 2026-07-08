@@ -28,18 +28,41 @@ export STRIP_PANELS_PY
 
 APPLETSRC := $(USER_HOME)/.config/plasma-org.kde.plasma.desktop-appletsrc
 
+PLASMA_BACKUP_DIR := backups/plasma-$(shell date +%Y%m%d-%H%M%S)
+PLASMA_CFG        := $(USER_HOME)/.config
+
+## Snapshot current plasma config before any destructive operation.
+.PHONY: backup-plasma
+backup-plasma:
+	mkdir -p $(PLASMA_BACKUP_DIR)
+	cp $(APPLETSRC)                                     $(PLASMA_BACKUP_DIR)/ 2>/dev/null || true
+	cp $(PLASMA_CFG)/kwinrc                             $(PLASMA_BACKUP_DIR)/ 2>/dev/null || true
+	cp $(PLASMA_CFG)/kglobalshortcutsrc                $(PLASMA_BACKUP_DIR)/ 2>/dev/null || true
+	cp $(PLASMA_CFG)/kdeglobals                        $(PLASMA_BACKUP_DIR)/ 2>/dev/null || true
+	cp $(PLASMA_CFG)/plasmashellrc                     $(PLASMA_BACKUP_DIR)/ 2>/dev/null || true
+	cp $(PLASMA_CFG)/plasmarc                          $(PLASMA_BACKUP_DIR)/ 2>/dev/null || true
+	cp -r $(USER_HOME)/.local/share/kscreen            $(PLASMA_BACKUP_DIR)/ 2>/dev/null || true
+	@echo ">>> plasma config backed up to $(PLASMA_BACKUP_DIR)"
+
 ## Operational maintenance — call explicitly: make reset-panels
 .PHONY: reset-panels
 
 ## Strips panel entries from appletsrc and restarts plasmashell so it reads clean config.
 reset-panels:
 	@python3 -c "$$STRIP_PANELS_PY" $(APPLETSRC) 2>/dev/null || true
-	@systemctl --user restart plasma-plasmashell.service; until systemctl --user is-active plasma-plasmashell.service >/dev/null 2>&1; do sleep 1; done && echo ">>> plasmashell restarted with clean panel config"
+	@systemctl --user restart plasma-plasmashell.service
+	@until systemctl --user is-active plasma-plasmashell.service >/dev/null 2>&1; do sleep 1; done
+	@echo ">>> plasmashell restarted with clean panel config"
 
-PLASMASHELL_ACTIVE := $(shell systemctl --user is-active plasma-plasmashell.service 2>/dev/null)
-user::
-ifeq ($(PLASMASHELL_ACTIVE),inactive)
-	@systemctl --user reset-failed plasma-plasmashell.service 2>/dev/null || true; systemctl --user start plasma-plasmashell.service; until systemctl --user is-active plasma-plasmashell.service >/dev/null 2>&1; do sleep 1; done && echo ">>> plasmashell started"
-endif
+## Start plasmashell if not running — handles both inactive and failed states at runtime.
+.PHONY: ensure-plasmashell
+ensure-plasmashell:
+	@systemctl --user is-active plasma-plasmashell.service >/dev/null 2>&1 || \
+	  (systemctl --user reset-failed plasma-plasmashell.service 2>/dev/null || true; \
+	   systemctl --user start plasma-plasmashell.service; \
+	   until systemctl --user is-active plasma-plasmashell.service >/dev/null 2>&1; do sleep 1; done; \
+	   echo ">>> plasmashell started")
+
+user:: ensure-plasmashell
 
 endif

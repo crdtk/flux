@@ -149,6 +149,7 @@ include mk/clean.mk
 include mk/common.mk
 include $(shell find mk/features -name system.mk | sort)
 include $(shell find mk/features -name user.mk | sort)
+include mk/post.mk
 
 # ----------------------------------------------------------
 # Privilege roll-up — parsed after every feature module so the accumulators
