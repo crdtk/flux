@@ -13,127 +13,32 @@
 %% emitter. All knowledge lives in features/<arena>/<decision>.pl modules
 %% loaded by the glob at the bottom — one file per revocable decision
 %% (constitution XXV): "remove all X logic" must touch at most one module.
+%%
+%% Reads top-down (XIV): what POST is → how it observes → how it plans →
+%% how it orders → how it chooses → how it speaks → how it touches the
+%% world. Prolog resolves goals at run time, so definition order is free;
+%% only the load-time tail (contract, loader, initialization) is pinned.
 
 :- use_module(library(lists)).
 :- use_module(library(apply)).
 :- use_module(library(readutil)).
 
-%% ── Dynamic state ─────────────────────────────────────────────────────────────
+%% ── Entry point ──────────────────────────────────────────────────────────────
 
-:- dynamic failed/3.      % failed(Level, Component, Reason)
-:- dynamic satisfied/1.   % satisfied(Goal): already true, no action needed
-:- dynamic build_rule/3.  % build_rule(Goal, Deps, Cmds)
-
-%% ── Module contract ──────────────────────────────────────────────────────────
-%% Feature modules add clauses to these predicates — the whole interface.
-%% Facts may be gated rule clauses whose body fails when inapplicable (XXIII).
-%% candidate/2 clause order is preference rank: a domain's candidates must
-%% all live in ONE module. advisory/3 names human-only steps (XXIV);
-%% demotion_reason/3 explains a candidate's failed viability with evidence.
-
-:- multifile binary_pkg/2, deb_install/1, deb_source/3, apt_repo/3,
-             pkg_repo/2, opt_install/3, opt_install_deps/2, desktop_fix/3,
-             config_patch/4, hardening_check/3, service_check/3,
-             service_deps/2, user_tool/3, user_tool_deps/2,
-             user_config/3, user_config_deps/2,
-             candidate/2, viable/2, dm_installed/1, dm_session_check/2,
-             dm_session_fix/2, active_display_manager/1,
-             saved_session_is_x11/0, session_rule/2,
-             demotion_reason/3, advisory/3.
-:- discontiguous binary_pkg/2, deb_install/1, deb_source/3, apt_repo/3,
-             pkg_repo/2, opt_install/3, opt_install_deps/2, desktop_fix/3,
-             config_patch/4, hardening_check/3, service_check/3,
-             service_deps/2, user_tool/3, user_tool_deps/2,
-             user_config/3, user_config_deps/2,
-             candidate/2, viable/2, dm_installed/1, dm_session_check/2,
-             dm_session_fix/2, active_display_manager/1,
-             saved_session_is_x11/0, session_rule/2,
-             demotion_reason/3, advisory/3.
-
-%% ── Environment (helpers available to every module) ──────────────────────────
-
-downloads_dir(D) :-
-    ( getenv('DOWNLOADS_DIR', D) -> true
-    ; getenv('HOME', H), atom_concat(H, '/Downloads', D) ).
-
-run_as_user(U) :-
-    ( getenv('RUN_AS_USER', U) -> true
-    ; getenv('SUDO_USER',   U) -> true
-    ; getenv('USER',        U) ).
-
-%% user_home(-H) — home of the real user, stable even when run under sudo
-%% (where $HOME would be /root).
-user_home(H) :-
-    run_as_user(U),
-    format(atom(H), '/home/~w', [U]).
-
-%% project_dir(-D) — the repo root, sensed from POST's own location
-%% (post/ is one level below it, XIX) rather than assumed: the tree works
-%% from any clone path.
-:- dynamic project_dir/1.
-:- prolog_load_context(directory, PostDir),
-   file_directory_name(PostDir, Root),
-   assertz(project_dir(Root)).
-
-%% os_release(+Key, -Value) — read /etc/os-release directly; environment
-%% variables are not a reliable carrier for it (login shells don't export
-%% UBUNTU_CODENAME).
-os_release(Key, Value) :-
-    read_file_to_string('/etc/os-release', S, []),
-    split_string(S, "\n", "", Lines),
-    format(atom(Prefix), '~w=', [Key]),
-    member(L, Lines),
-    string_concat(Prefix, V0, L),
-    split_string(V0, "", "\"", [V1]),
-    atom_string(Value, V1), !.
-
-ubuntu_codename(C) :-
-    ( os_release('UBUNTU_CODENAME', C) -> true
-    ; getenv('UBUNTU_CODENAME', C)     -> true
-    ; C = noble ).
-
-%% ubuntu_ver(-V) — VERSION_ID without the dot (26.04 → 2604), the form
-%% NVIDIA's CUDA repo paths use.
-ubuntu_ver(V) :-
-    os_release('VERSION_ID', VId),
-    atomic_list_concat(Parts, '.', VId),
-    atomic_list_concat(Parts, '', V).
-
-%% Shared hardware gate (used by platform/nvidia and desktop/lomiri).
-%% Story-local gates (has_bmc, has_plx_switch, GA104GL) live in their module.
-has_nvidia :- shell_ok("lspci 2>/dev/null | grep -qi nvidia").
-
-%% ── Display (→ stderr) ───────────────────────────────────────────────────────
-
-section(Num, Title) :-
-    format(user_error, '~n\033[1m-- ~w ~w ~`-t~55|\033[0m~n', [Num, Title]).
-
-post_ok(Level, Comp, Detail) :-
-    format(user_error, '\033[32m[ OK ]\033[0m  ~w/~w ~`.t~45|~w~n', [Level, Comp, Detail]).
-
-post_warn(Level, Comp, Detail) :-
-    format(user_error, '\033[33m[WARN]\033[0m  ~w/~w ~`.t~45|~w~n', [Level, Comp, Detail]).
-
-post_fail(Level, Comp, Detail) :-
-    format(user_error, '\033[31m[FAIL]\033[0m  ~w/~w ~`.t~45|~w~n', [Level, Comp, Detail]).
-
-post_skip(Goal, Reason) :-
-    format(user_error, '\033[33m[SKIP]\033[0m  ~w ~`.t~45|~w~n', [Goal, Reason]).
-
-%% ── Shell helper ─────────────────────────────────────────────────────────────
-
-shell_ok(Cmd) :-
-    atomic_list_concat([Cmd, '>/dev/null 2>&1'], ' ', Silent),
-    shell(Silent, 0).
-
-%% ── Selection mechanism ──────────────────────────────────────────────────────
-%% Generalizes the plasma-widget sentinel lesson: never trust the assumed
-%% option. Candidates are declared in preference order (clause order = rank),
-%% each must survive live heuristic probes, and the first survivor wins —
-%% pure Prolog backtracking. Installed alternates are held standby-ready so
-%% switching is a greeter choice, not a repair.
-
-select(Domain, Choice) :- candidate(Domain, Choice), viable(Domain, Choice), !.
+main :-
+    set_stream(user_error, buffer(false)),
+    maplist(diagnose, [internet, packages, repos, hardening, patches, desktop,
+                       user_tools, services, selection, user_config]),
+    nl(user_error),
+    generate_rules,
+    collect(system_ready, [], _, Result),
+    ( Result = ok([])
+    -> format(user_error, '\033[32mSystem is up to date.\033[0m~n', [])
+    ; Result = ok(Cmds)
+    -> catch(maplist(writeln, Cmds), error(io_error(_,_),_), true)
+    ; format(user_error,
+        '\033[31mFix blocked — resolve unachievable dependencies first.\033[0m~n', [])
+    ).
 
 %% ── Diagnostics ──────────────────────────────────────────────────────────────
 
@@ -506,12 +411,127 @@ collect_deps([H|T], Vis0, Vis2, Result) :-
        )
     ).
 
-%% ── Feature modules ──────────────────────────────────────────────────────────
-%% One file per revocable decision, grouped into the arenas of this build
-%% (base, platform, net, desktop, dev, agents, project). Dropping a file in
-%% is adding a capability; deleting it revokes the decision. Loaded sorted
-%% so runs are reproducible.
+%% ── Selection mechanism ──────────────────────────────────────────────────────
+%% Generalizes the plasma-widget sentinel lesson: never trust the assumed
+%% option. Candidates are declared in preference order (clause order = rank),
+%% each must survive live heuristic probes, and the first survivor wins —
+%% pure Prolog backtracking. Installed alternates are held standby-ready so
+%% switching is a greeter choice, not a repair.
 
+select(Domain, Choice) :- candidate(Domain, Choice), viable(Domain, Choice), !.
+
+%% ── Display (→ stderr) ───────────────────────────────────────────────────────
+
+section(Num, Title) :-
+    format(user_error, '~n\033[1m-- ~w ~w ~`-t~55|\033[0m~n', [Num, Title]).
+
+post_ok(Level, Comp, Detail) :-
+    format(user_error, '\033[32m[ OK ]\033[0m  ~w/~w ~`.t~45|~w~n', [Level, Comp, Detail]).
+
+post_warn(Level, Comp, Detail) :-
+    format(user_error, '\033[33m[WARN]\033[0m  ~w/~w ~`.t~45|~w~n', [Level, Comp, Detail]).
+
+post_fail(Level, Comp, Detail) :-
+    format(user_error, '\033[31m[FAIL]\033[0m  ~w/~w ~`.t~45|~w~n', [Level, Comp, Detail]).
+
+post_skip(Goal, Reason) :-
+    format(user_error, '\033[33m[SKIP]\033[0m  ~w ~`.t~45|~w~n', [Goal, Reason]).
+
+%% ── Shell helper ─────────────────────────────────────────────────────────────
+
+shell_ok(Cmd) :-
+    atomic_list_concat([Cmd, '>/dev/null 2>&1'], ' ', Silent),
+    shell(Silent, 0).
+
+%% ── Environment (helpers available to every module) ──────────────────────────
+
+downloads_dir(D) :-
+    ( getenv('DOWNLOADS_DIR', D) -> true
+    ; getenv('HOME', H), atom_concat(H, '/Downloads', D) ).
+
+run_as_user(U) :-
+    ( getenv('RUN_AS_USER', U) -> true
+    ; getenv('SUDO_USER',   U) -> true
+    ; getenv('USER',        U) ).
+
+%% user_home(-H) — home of the real user, stable even when run under sudo
+%% (where $HOME would be /root).
+user_home(H) :-
+    run_as_user(U),
+    format(atom(H), '/home/~w', [U]).
+
+%% project_dir(-D) — the repo root, sensed from POST's own location
+%% (post/ is one level below it, XIX) rather than assumed: the tree works
+%% from any clone path.
+:- dynamic project_dir/1.
+:- prolog_load_context(directory, PostDir),
+   file_directory_name(PostDir, Root),
+   assertz(project_dir(Root)).
+
+%% os_release(+Key, -Value) — read /etc/os-release directly; environment
+%% variables are not a reliable carrier for it (login shells don't export
+%% UBUNTU_CODENAME).
+os_release(Key, Value) :-
+    read_file_to_string('/etc/os-release', S, []),
+    split_string(S, "\n", "", Lines),
+    format(atom(Prefix), '~w=', [Key]),
+    member(L, Lines),
+    string_concat(Prefix, V0, L),
+    split_string(V0, "", "\"", [V1]),
+    atom_string(Value, V1), !.
+
+ubuntu_codename(C) :-
+    ( os_release('UBUNTU_CODENAME', C) -> true
+    ; getenv('UBUNTU_CODENAME', C)     -> true
+    ; C = noble ).
+
+%% ubuntu_ver(-V) — VERSION_ID without the dot (26.04 → 2604), the form
+%% NVIDIA's CUDA repo paths use.
+ubuntu_ver(V) :-
+    os_release('VERSION_ID', VId),
+    atomic_list_concat(Parts, '.', VId),
+    atomic_list_concat(Parts, '', V).
+
+%% Shared hardware gate (used by platform/nvidia and desktop/lomiri).
+%% Story-local gates (has_bmc, has_plx_switch, GA104GL) live in their module.
+has_nvidia :- shell_ok("lspci 2>/dev/null | grep -qi nvidia").
+
+%% ── Load-time tail (order pinned from here down) ─────────────────────────────
+
+%% Dynamic state.
+:- dynamic failed/3.      % failed(Level, Component, Reason)
+:- dynamic satisfied/1.   % satisfied(Goal): already true, no action needed
+:- dynamic build_rule/3.  % build_rule(Goal, Deps, Cmds)
+
+%% Module contract — feature modules add clauses to these predicates; the
+%% declarations must be loaded BEFORE the modules are. Facts may be gated
+%% rule clauses whose body fails when inapplicable (XXIII). candidate/2
+%% clause order is preference rank: a domain's candidates must all live in
+%% ONE module. advisory/3 names human-only steps (XXIV); demotion_reason/3
+%% explains a candidate's failed viability with evidence.
+:- multifile binary_pkg/2, deb_install/1, deb_source/3, apt_repo/3,
+             pkg_repo/2, opt_install/3, opt_install_deps/2, desktop_fix/3,
+             config_patch/4, hardening_check/3, service_check/3,
+             service_deps/2, user_tool/3, user_tool_deps/2,
+             user_config/3, user_config_deps/2,
+             candidate/2, viable/2, dm_installed/1, dm_session_check/2,
+             dm_session_fix/2, active_display_manager/1,
+             saved_session_is_x11/0, session_rule/2,
+             demotion_reason/3, advisory/3.
+:- discontiguous binary_pkg/2, deb_install/1, deb_source/3, apt_repo/3,
+             pkg_repo/2, opt_install/3, opt_install_deps/2, desktop_fix/3,
+             config_patch/4, hardening_check/3, service_check/3,
+             service_deps/2, user_tool/3, user_tool_deps/2,
+             user_config/3, user_config_deps/2,
+             candidate/2, viable/2, dm_installed/1, dm_session_check/2,
+             dm_session_fix/2, active_display_manager/1,
+             saved_session_is_x11/0, session_rule/2,
+             demotion_reason/3, advisory/3.
+
+%% Feature modules — one file per revocable decision, grouped into the
+%% arenas of this build (base, platform, net, desktop, dev, agents,
+%% project). Dropping a file in is adding a capability; deleting it revokes
+%% the decision. Loaded sorted so runs are reproducible.
 :- prolog_load_context(directory, Dir),
    atomic_list_concat([Dir, '/features/*/*.pl'], Pat),
    expand_file_name(Pat, Files),
@@ -521,22 +541,5 @@ collect_deps([H|T], Vis0, Vis2, Result) :-
    ),
    sort(Files, Sorted),
    load_files(Sorted, [silent(true)]).
-
-%% ── Entry point ──────────────────────────────────────────────────────────────
-
-main :-
-    set_stream(user_error, buffer(false)),
-    maplist(diagnose, [internet, packages, repos, hardening, patches, desktop,
-                       user_tools, services, selection, user_config]),
-    nl(user_error),
-    generate_rules,
-    collect(system_ready, [], _, Result),
-    ( Result = ok([])
-    -> format(user_error, '\033[32mSystem is up to date.\033[0m~n', [])
-    ; Result = ok(Cmds)
-    -> catch(maplist(writeln, Cmds), error(io_error(_,_),_), true)
-    ; format(user_error,
-        '\033[31mFix blocked — resolve unachievable dependencies first.\033[0m~n', [])
-    ).
 
 :- initialization(main, main).
