@@ -8,13 +8,14 @@
 #       — a file written, a setting applied, a port open, any state that can be
 #       independently verified. A file is the form Make tracks natively (see V). For
 #       non-file outcomes, sense the condition into a gated variable at parse time
-#       (see III), then act on it in a dot-prefixed non-phony target inserted into
-#       the system: or user: flow. A sentinel is a show of ignorance, not a
-#       workaround: if you cannot name the outcome, you do not understand the action.
-#       An action without a traceable execution consequence is madness.
+#       (see III), then act on it in a dot-prefixed non-phony target. A sentinel is
+#       a show of ignorance, not a workaround: if you cannot name the outcome, you
+#       do not understand the action. An action without a traceable execution
+#       consequence is madness.
 # II.   IDEMPOTENCY & STAGING. Re-runs converge to one truth; the protocol is
-#       `make clean && make`. Bootstrap deps are order-only so auto-updates never
-#       rebuild; multi-phase work stages across runs.
+#       `make clean && make | sudo bash` (make prints the POST plan — XXII).
+#       Bootstrap deps are order-only so auto-updates never rebuild; multi-phase
+#       work stages across runs.
 # III.  DECIDE AT PARSE TIME. Sense capability into named variables — no magic
 #       numbers. Gate the decision, not the payload. What the makefile installs is
 #       the source of truth — derive config from it, never re-sense runtime.
@@ -35,9 +36,10 @@
 #       embedded pipeline demands escape gymnastics, decompose — don't escape harder.
 # VII.  DEPENDENCY SHAPE. Expose only outermost targets; intermediates cascade.
 #       Order-only (|) voids $< — reference paths explicitly.
-# VIII. PRIVILEGE. One IS_ROOT gate at parse time; no sudo inside recipes (branch
-#       instead). Prefer user-space, escalate only when the path demands it. Packages
-#       enter only through INSTALL gates. Provisioning scope only — no stateless targets.
+# VIII. PRIVILEGE. No sudo inside recipes — a target either runs at the caller's
+#       privilege or names the escalation explicitly in its documented invocation
+#       (make agent-login). Prefer user-space, escalate only when the path demands it.
+#       Package installation is POST's alone (XXI) — make recipes never apt.
 # IX.   VARIABLE LOCALITY. Define each variable just above and before its first use;
 #       name every shell subexpression; inline single-use values, derive paths from
 #       parents. A := accumulator expands += immediately, so a derived append follows
@@ -54,15 +56,12 @@
 #       for a structured mode (--json, -j, --format=json) and parse that with jq (XII).
 #       Check every new command on adoption — text-scraping (awk/sed on colorized output,
 #       ANSI-stripping) is the fallback, never the first reach.
-# XIV.  CASCADE ORDERING. State the top-level requirement first (MANAGEMENT += /path),
-#       then resolve each dependency one level deeper in the targets below. Only
-#       leaf requirements go into accumulator variables — if target Y exists solely
-#       as a prerequisite of target X, and X is already in MANAGEMENT, then Y must
-#       not also appear in MANAGEMENT (Make resolves Y through X's dependency chain).
-#       Targets appear from most dependent to most foundational (dependents before
-#       prerequisites, enforced by p9). No intermediate variables for target paths
-#       — write the literal path where Make tracks it. The cascade reads as a demand
-#       chain: "to build X, you need Y; to build Y, you need Z."
+# XIV.  CASCADE ORDERING. State the top-level requirement first, then resolve each
+#       dependency one level deeper in the targets below. Targets appear from most
+#       dependent to most foundational (dependents before prerequisites). No
+#       intermediate variables for target paths — write the literal path where Make
+#       tracks it. The cascade reads as a demand chain: "to build X, you need Y; to
+#       build Y, you need Z."
 # XV.   COMMENT SCOPE. Module headers describe what that module does — not how.
 #       General conventions (ordering, naming, privilege) are stated once in this
 #       constitution and referenced by number (e.g. "XIV") in module comments when
@@ -76,20 +75,13 @@
 #       sections.
 # XVII. FEATURE MODULES. One capability per directory, classified by the freedesktop.org
 #       menu taxonomy: mk/features/<MainCategory>/<AdditionalCategory>/ (see
-#       specifications.freedesktop.org/menu — e.g. Network/RemoteAccess, Development/IDE,
-#       System/Security). An Additional category may nest a specific application one
-#       level deeper (Development/IDE/VS-Code/), each app a leaf with its own
-#       system.mk/user.mk. Its root and user artifacts live in system.mk and user.mk —
-#       privilege (VIII) stays auditable as the filename: "what runs as root" is every
-#       system.mk. The top routers find-include every system.mk then every user.mk at
-#       any depth (Main/Additional, optionally /App, /App/Variant), so adding a
-#       capability is dropping a directory — no include edits (VI, XI). A
-#       single-privilege feature has only one of the two files; a feature's extra parts
-#       are included by its own entry file. Cross-feature infrastructure lives in
-#       mk/common.mk (parsed before the globs); mk/aggregate.mk (parsed after) rolls the
-#       accumulators into the system:/user: targets. The intra-feature contract (shared
-#       path/var) is declared in its system.mk, which the user glob sees because
-#       */*/system.mk parses first.
+#       specifications.freedesktop.org/menu — e.g. Settings/Panels, System/Filesystem).
+#       Root and user actions live in system.mk and user.mk — privilege (VIII) stays
+#       auditable as the filename. The top routers find-include every system.mk then
+#       every user.mk at any depth, so adding a capability is dropping a directory —
+#       no include edits (VI, XI). Since XXI, a feature module holds only what POST
+#       cannot: timestamp-dependent builds and manual/destructive operations. Shared
+#       variables live in the Makefile head, parsed before the globs.
 # XVIII. INVARIANTS AS PREREQUISITES. A file that must exist for a target to be correctly
 #       deployed — not just present, but safe and complete — is a prerequisite of that
 #       target, not an independent accumulator entry. Accumulator entries declare
@@ -109,132 +101,83 @@
 #       variables unless the problem demands them. Complexity must be justified by a
 #       concrete failure of the simpler form — not by anticipating one.
 #
+# --- POST (post/post.pl, included via mk/post.mk) ---------
+#
+# XXI.  POST OWNS STATE. POST alone provisions, detects and repairs drift-state;
+#       make keeps only what POST cannot express: timestamp-dependent builds
+#       (venvs rebuilt when requirements.txt changes), inverses (clean, eject),
+#       and interactive targets (agent-login). Every stateful outcome
+#       the setup depends on earns a POST rule: an unprivileged, read-only,
+#       cheap check probing the CONTENT that matters — an existence-only check
+#       is a sentinel in the sense of I (a kwalletrc that existed but lacked
+#       Enabled=false passed for weeks) — paired with an idempotent fix that
+#       the next run re-verifies. Duplicating a POST-owned state in a make
+#       recipe is a defect, not redundancy.
+# XXII. PIPE IS ACCEPTANCE. stderr is the human-readable plan, stdout the fix
+#       commands; nothing applies without `make | sudo bash`, and the human
+#       pipes — never an agent (sudo is denied to agents in depth: sudoers
+#       timestamp_timeout=0, Claude deny rule, ai-agent sandbox). Generation
+#       runs unprivileged. Secrets come from the invoking environment
+#       (TS_AUTHKEY, OPENCODE_ZEN_KEY): a rule gates on getenv and simply does
+#       not exist without its key — keyless runs WARN where naming helps.
+# XXIII. GATED FACTS, BACKTRACKED CHOICES. A conditional rule is a clause whose
+#       body fails when inapplicable (has_nvidia, has_bmc): absent, not failing —
+#       POST's form of III. Competing options (display managers, sessions) are
+#       ranked candidates behind live viability probes: clause order is
+#       preference, first survivor wins, losers stay standby-ready, every
+#       demotion names its evidence. Never hardcode the winner.
+# XXIV. HUMAN-ONLY STEPS WARN. A fix needing interaction (OAuth login, greeter
+#       choice) is never emitted as a command — diagnose WARNs and names the make
+#       target the human runs (make agent-login). Build-rule deps
+#       are single-level, each goal declaring only its immediate predecessor —
+#       the chain encodes causality, as XIV does for prerequisites.
+# XXV.  FILE BY FATE. post/post.pl is the generic engine (sensing, diagnosis,
+#       selection, planning, emission); all knowledge lives in
+#       post/features/<arena>/<decision>.pl modules, loaded by glob — dropping a
+#       file in adds a capability, deleting it revokes the decision. Arenas are
+#       this build's own vocabulary (base, platform, net, desktop, dev, agents,
+#       project), not an external ontology. A module is ONE revocable decision:
+#       a fact lives with the decision whose reversal would delete it, so
+#       "remove all X logic" touches at most one module. Ranked candidate/2
+#       clauses of one domain never split across modules (clause order is rank);
+#       story-local probes stay with their story, shared gates live in the
+#       engine; a fact folds into its arena's tools module until it accretes a
+#       gate or a second fact type.
+#
 # ==========================================================
 
 MAKEFLAGS += --no-builtin-rules
 .SUFFIXES:
 
-IS_ROOT := $(filter 0,$(shell id -u))
-
+# Default goal — declared before any include so `make` can never fall through
+# to another target (clean.mk parses first). The recipe lives in mk/post.mk:
+# `make` prints the POST plan, `make | sudo bash` applies it (XXII).
 .PHONY: all
-all: $(if $(IS_ROOT),system,user)
+all:
 
 # ----------------------------------------------------------
 # Shared variables (referenced across all includes)
 # ----------------------------------------------------------
 
-APT             := DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=-1
 USER_HOME       := $(shell getent passwd $${SUDO_USER:-$$(whoami)} | cut -d: -f6)
-PROJECTS        := $(USER_HOME)/Desktop/Projects
 DOWNLOADS_DIR   := $(USER_HOME)/Downloads
-UBUNTU_VER      := $(shell lsb_release -rs 2>/dev/null | tr -d '.')
 UBUNTU_CODENAME := $(shell lsb_release -cs 2>/dev/null)
-PLASMOIDS       := $(USER_HOME)/.local/share/plasma/plasmoids
-
-# Accumulator seeds — must appear before includes so += works correctly
-DEB_URLS   :=
-PKG_APPS   :=
-HARDENING  :=
-MANAGEMENT :=
-COMPUTE    :=
-STORAGE    :=
-DISPLAY_CONFIG :=
-USER_FILES :=
+RUN_AS_USER     := $(or $(SUDO_USER),$(USER))
 
 # ----------------------------------------------------------
-# Feature modules
+# Modules. Provisioning and drift repair are POST's (XXI); the feature tree
+# keeps only timestamp-dependent builds and manual/destructive operations.
 # ----------------------------------------------------------
 
 include mk/clean.mk
-include mk/common.mk
 include $(shell find mk/features -name system.mk | sort)
 include $(shell find mk/features -name user.mk | sort)
 include mk/post.mk
-
-# ----------------------------------------------------------
-# Privilege roll-up — parsed after every feature module so the accumulators
-# (HARDENING/MANAGEMENT/PKG_APPS/DISPLAY_CONFIG/COMPUTE/STORAGE, USER_FILES) are
-# complete. Branches of the IS_ROOT gate (VIII): `system` builds root artifacts,
-# `user` builds the user's. Capability senses (SYS_SM, GPU_BDF, SN8100) come from the
-# features that own them — defined before this file by the feature globs.
-# ----------------------------------------------------------
-
-# ---- system (root) ----
-.PHONY: system
-
-COMPUTE_CAPABLE := $(shell [ -n "$(SYS_SM)" ] && [ "$(SYS_SM)" -ge 75 ] && echo 1)
-SN8100_PRESENT  := $(shell test -e /dev/disk/by-label/backup && echo 1)
-
-INSTALL := $(HARDENING) $(MANAGEMENT) $(PKG_APPS) $(DISPLAY_CONFIG) \
-           $(if $(COMPUTE_CAPABLE),$(COMPUTE),) \
-           $(if $(SN8100_PRESENT),$(STORAGE),)
-PENDING := $(filter-out $(wildcard $(INSTALL)),$(INSTALL))
-
-system:: $(PENDING)
-	update-initramfs -u
-	$(APT) autoremove
-
-# ---- user (non-root) ----
-.PHONY: user
-
-USER_PENDING := $(filter-out $(wildcard $(USER_FILES)),$(USER_FILES))
-
-user:: $(USER_PENDING)
-	/usr/bin/kbuildsycoca6
-	@systemctl --user reset-failed plasma-plasmashell.service 2>/dev/null || true
-	@systemctl --user restart plasma-plasmashell.service 2>/dev/null || true
-	@echo ">>> plasmashell restarted — system tray indicators (keyboard layout, volume, etc.) will auto-populate"
-	@[ -z "$(GPU_BDF)" ] || echo ">>> GPU $(GPU_BDF) PCIe link: $$(cat /sys/bus/pci/devices/$(GPU_BDF)/current_link_speed) x$$(cat /sys/bus/pci/devices/$(GPU_BDF)/current_link_width) (want 8.0 GT/s x4; 2.5 GT/s = reseat/swap cable)"
-	@echo
-	@echo "=== Tailscale Status ==="
-	@tailscale status 2>/dev/null || echo "NOT CONNECTED"
-	@echo
-	@echo "=== Interface ==="
-	@ip addr show tailscale0 2>/dev/null | awk '/inet /{print "  IP: " $$2}' || echo "  No tailscale0 interface"
-	@echo
-	@echo "=== Peers ==="
-	@tailscale status 2>/dev/null | awk 'NR>1{print "  " $$0}' | head -5 || echo "  No peers"
-
-# ----------------------------------------------------------
-# Infrastructure — pattern rules and download target
-# ----------------------------------------------------------
-
-UNTRACKED_PKGS  := git avahi-daemon arp-scan nmap appmenu-gtk3-module appmenu-registrar pciutils dmidecode
-LAZILY_RESOLVED := syncthing npm mc libheif-examples gwenview cockpit cockpit-files \
-                   rclone plasma-session-x11 flameshot gh plasma-widgets-addons xclip
-
-/usr/bin/apt-file: | /etc/systemd/system/packagekit.service
-	$(APT) update
-	$(APT) install -y apt-file $(UNTRACKED_PKGS) $(LAZILY_RESOLVED)
-	apt-file update
-	@echo ">>> apt-file ready"
-
-## Resolve packages by Custom Repository URL
-/usr/bin/%: /etc/apt/sources.list.d/%.list
-	$(APT) update
-	$(APT) install -y $*
-
-## Resolve packages using apt-file global search
-/usr/bin/%: | /usr/bin/apt-file
-	$(APT) install -y $$(apt-file search $@ 2>/dev/null | awk -F': ' '{print $$1}' | head -1)
-
-/usr/share/xsessions/%.desktop: | /usr/bin/apt-file
-	$(APT) install -y $$(apt-file search $@ 2>/dev/null | awk -F': ' '{print $$1}' | head -1)
-
-/usr/share/plasma/plasmoids/%/metadata.json: | /usr/bin/apt-file
-	$(APT) install -y $$(apt-file search $@ 2>/dev/null | awk -F': ' '{print $$1}' | head -1)
-
-$(DOWNLOADS_DIR)/%: | $(DOWNLOADS_DIR)
-	curl -fL --retry 5 --retry-delay 3 --progress-bar -A "Mozilla/5.0" $(filter %/$*,$(DEB_URLS)) -o $@
-
-$(DOWNLOADS_DIR):
-	mkdir -p $@
 
 COLAB_NB     := demos/prefix-caching/prefix_caching_demo.ipynb
 GITHUB_REPO  := crdtk/flux
 COLAB_BRANCH := main
 
-UV       := $(USER_HOME)/.local/bin/uv
 VENV     := $(CURDIR)/.venv
 VENV_PY  := $(VENV)/bin/python3
 VENV_PIP  = VIRTUAL_ENV=$(VENV) $(UV) pip install
@@ -266,6 +209,11 @@ KAGGLE_META    := demos/prefix-caching/kernel-metadata.json
 KAGGLE_KERNEL  := demos/prefix-caching/.kaggle-kernel
 KAGGLE_OUT_DIR := demos/prefix-caching/output
 KAGGLE         := $(USER_HOME)/.local/bin/kaggle
+
+# Bootstrap prerequisite (XVIII) — POST also converges this via user_tool(kaggle);
+# the rule keeps kaggle-run self-sufficient on a box POST hasn't converged yet.
+$(KAGGLE): | $(UV)
+	$(UV) tool install kaggle
 
 # KAGGLE_USERNAME / KAGGLE_API_TOKEN come from the environment (Make auto-imports env
 # vars). kaggle-run checks they're set and errors clearly if not.

@@ -13,8 +13,9 @@ ifeq ($(shell id -u),0)
 	rm -rf $(CURDIR)/.venv
 	rm -rf $(CURDIR)/demos/LLMs-from-scratch/venv
 	rm -f /usr/share/applications/code.desktop /usr/share/applications/pycharm-community.desktop
-	rm -f $(CUDA_KEYRING_DEB) /etc/apt/sources.list.d/cuda-ubuntu*-x86_64.list
+	rm -f $(DOWNLOADS_DIR)/cuda-keyring_1.1-1_all.deb /etc/apt/sources.list.d/cuda-ubuntu*-x86_64.list
 	rm -f /etc/apt/preferences.d/no-snapd
+	rm -rf /etc/crucible
 	rm -f /etc/systemd/system/packagekit.service
 	systemctl disable --now mnt-backup.automount mnt-backup.mount 2>/dev/null || true
 	rm -f /etc/systemd/system/mnt-backup.automount /etc/systemd/system/mnt-backup.mount
