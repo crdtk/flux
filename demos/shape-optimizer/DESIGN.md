@@ -2,20 +2,23 @@
 
 **Status**: Pre-implementation  
 **Hardware**: RTX A4000 (SM86, 16 GB GDDR6) now · 4× RTX PRO 6000 Blackwell Max-Q (SM100, 96 GB GDDR7) on arrival  
-**Production problem**: Content moderation distillation for GDPR (General Data Protection Regulation) / DSA (Digital Services Act) compliance serving  
-**Portfolio target**: Upstream PR (Pull Request) to vLLM with benchmarked Triton kernel improvement
+**Problem**: GDPR (General Data Protection Regulation) / DSA (Digital Services Act) compliance forces every user-generated item through classification and every flag through a reasoned explanation — serving a 7B teacher on all of that traffic is the cost bottleneck  
+**Deliverable**: a cascaded serving stack (encoder fast path + shape-optimized distilled decoder) that holds teacher accuracy within 5% at a fraction of the serving cost  
+**Byproduct**: the workload's unusual attention shape yields a Triton kernel worth upstreaming — PR (Pull Request) to vLLM with benchmarked improvement
 
 ---
 
 ## 1. Problem Statement
 
-Vlad Feinberg (Google DeepMind pre-training area lead) identified three pillars of frontier lab work: distillation, inference code design, and quantization. This project addresses the second:
+Moderation is no longer work a platform can sample: the DSA obliges platforms to act on policy-violating content, and its Article 17 requires a "clear and specific statement of reasons" for every restriction. The GDPR adds personal-data exposure (FLAG:PII) to the same pipeline. Compliance therefore fixes the workload — **every** item gets classified, and **every** flag needs a generated explanation. What compliance does not fix is the serving bill.
 
-> "Choosing neural net topology shapes that fully saturate all hardware units — matmul FLOPs (Floating-Point Operations per Second), memory bandwidth, communication bandwidth — to get as high MFU (Model FLOPs Utilization) as possible during inference."
+A 7B teacher (Qwen2.5-7B-Instruct-AWQ) clears the accuracy bar on the SAFE / FLAG:PII / FLAG:HATE / FLAG:SPAM / FLAG:REVIEW taxonomy, but running a 7B decoder over 100% of traffic ties serving cost linearly to the very volume regulation forces you to process. The engineering question is the cheapest system that still holds the bar:
 
-The specific question: **what student model shape, when distilled from the content moderation teacher (Qwen2.5-7B-Instruct-AWQ), minimizes inference latency on target hardware while staying within X% of teacher accuracy on the SAFE / FLAG:PII / FLAG:HATE / FLAG:SPAM / FLAG:REVIEW taxonomy?**
+**What student model shape, when distilled from the moderation teacher, minimizes system serving latency on target hardware while staying within 5% of teacher accuracy?**
 
-This is a bi-objective optimization over a discrete, hardware-constrained search space. The two objectives pull in different directions — optimal training-efficiency shapes differ from optimal serving-latency shapes.
+This is a bi-objective optimization over a discrete, hardware-constrained search space. The two objectives pull in different directions — optimal training-efficiency shapes differ from optimal serving-latency shapes. The criterion for a good serving shape is hardware saturation:
+
+> "Choosing neural net topology shapes that fully saturate all hardware units — matmul FLOPs (Floating-Point Operations per Second), memory bandwidth, communication bandwidth — to get as high MFU (Model FLOPs Utilization) as possible during inference." — Vlad Feinberg, Google DeepMind
 
 ---
 
@@ -58,7 +61,7 @@ SAFE / FLAG:X           ┌─────────────────�
 
 **Stage 1** (encoder, fast path): DistilBERT (66M params) or DeBERTa-v3-base (86M params), fine-tuned on soft labels from the teacher. Not the subject of shape optimization — architecture is fixed. Serves ~80% of traffic with a single forward pass, no KV (Key-Value) cache required.
 
-**Stage 2** (decoder, slow path): the custom student architecture found by the shape optimizer. Served by vLLM with prefix caching on the shared policy prefix. Generates a classification label plus a natural-language recommendation (e.g., "Flagged FLAG:PII — email address in line 2. Redact before publication."). The long shared prefix + short per-request query is what creates the interesting attention shape for kernel optimization.
+**Stage 2** (decoder, slow path): the custom student architecture found by the shape optimizer. Served by vLLM with prefix caching on the shared policy prefix. Generates a classification label plus a natural-language recommendation (e.g., "Flagged FLAG:PII — email address in line 2. Redact before publication.") — the statement-of-reasons artifact DSA Article 17 requires. The long shared prefix + short per-request query is what creates the interesting attention shape for kernel optimization.
 
 **Confidence threshold θ**: a tunable parameter (default 0.95) added to the Bayesian optimization search space (Section 4.4). Higher θ → more traffic hits the decoder → higher latency, higher accuracy. Lower θ → more fast-path routing → lower latency, risk of missing edge cases.
 
@@ -521,9 +524,9 @@ Tasks:
 
 ---
 
-## 10. Contribution Artifact
+## 10. Byproduct: Upstream Kernel Contribution
 
-The upstream vLLM PR (Pull Request) contains:
+The attention shape this workload produces — a short per-request query attending over a long shared policy prefix, SEQ_Q ≪ SEQ_KV — is not specific to this deployment: any moderation service with a fixed policy preamble hits it. A kernel tuned for it therefore belongs upstream, not in the app. The vLLM PR (Pull Request) contains:
 - `vllm/attention/backends/triton_content_mod.py` — the autotuned kernel
 - `benchmarks/shape_optimizer/` — the benchmark showing speedup on the content moderation shape
 - `tests/kernels/test_content_mod_attention.py` — correctness test vs. reference implementation

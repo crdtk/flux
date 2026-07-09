@@ -1,6 +1,6 @@
 %% desktop/black-theme — everything #000000: whole-desktop truly-black
-%% scheme derived from BreezeDark (keeps its light foregrounds), the
-%% Terminator profile to match, and Dolphin previews.
+%% scheme derived from BreezeDark (keeps its light foregrounds) and the
+%% Terminator profile to match.
 
 user_config(crucible_black, Check, Fix) :-
     user_home(Home),
@@ -15,8 +15,3 @@ user_config(terminator_black, Check, Fix) :-
     format(atom(Fix),
         "mkdir -p ~w/.config/terminator && printf '%s\\n' '[profiles]' '  [[default]]' '    background_color = \"#000000\"' '    background_type = solid' '    foreground_color = \"#ffffff\"' > ~w/.config/terminator/config",
         [Home, Home]).
-user_config(dolphin_previews, Check,
-    "kwriteconfig5 --file kdeglobals --group 'KFileDialog Settings' --key 'Show Preview' true") :-
-    user_home(Home),
-    format(atom(Check),
-        "grep -q '^Show Preview=true' ~w/.config/kdeglobals 2>/dev/null", [Home]).
