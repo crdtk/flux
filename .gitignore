@@ -26,6 +26,10 @@ demos/shape-optimizer/analysis/
 demos/shape-optimizer/trials/
 demos/shape-optimizer/notebooks/out/
 
+# KV bench — venv/bytecode regenerated at runtime; results/ IS committed (provenance)
+demos/shape-optimizer/bench/.venv/
+demos/shape-optimizer/bench/kv_bench/__pycache__/
+
 # IDE
 .idea/
 
