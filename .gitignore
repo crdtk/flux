@@ -5,8 +5,10 @@
 # Working files
 COMMIT.md
 
-# Downloaded reference docs — regenerate with: make references
-References/**/*.pdf
+# Reference material — PDFs regenerate with `make references`; the rest is
+# personal (LinkedIn profile drafts, recruiter outreach) and must never
+# reach this public repo
+References/
 
 # Build artifacts
 .sentinel/
