@@ -1,23 +1,21 @@
 # Half the Bytes, Twice the Shoppers
 
-*How one mid-range GPU, a deleted prototype, and three benchmarks that
-lied on the way to a number: compressing an LLM's working memory serves
-56% more customers at peak — for free.*
+*A shopper about to order the wrong jeans. A graphics card that can
+only hold so many customers in mind. Three benchmarks that lied. How
+compressing an AI's working memory serves 56% more people — for free.*
 
 ---
 
-Two supposedly rival servers spent an evening in July trading benchmark
-results so similar they could have been photocopies. Every latency
-percentile matched. Every throughput curve overlapped. It looked like a
-perfectly controlled experiment — right up until the request counters
-gave the game away. One server had answered 2,180 requests.
+Somewhere in this benchmark is a shopper who has returned eight pairs
+of jeans, every one of them too tight in the thighs. Right now they are
+looking at pair number nine — a Levi's 501, in a size that will not fit
+— and an AI is reading three years of their purchase history to talk
+them out of it.
 
-The other had answered four.
-
-The A/B test was never an A/B test. One server had been racing its own
-reflection, and the harness cheerfully scored the tie. This is the
-story of getting an honest number out of one mid-range workstation GPU
-— and of the three lies a benchmark told on the way.
+Whether that AI gets to save them depends on something unglamorous: how
+many shoppers its graphics card can hold in mind at once. This is the
+story of how one mid-range card learned to hold twice as many — and of
+the three lies a benchmark told before giving up the honest number.
 
 ## June 2026: the number that couldn't be checked
 
@@ -38,13 +36,15 @@ reproduce doesn't go in the repo.
 
 ## The scenario: a size advisor with a memory problem
 
-The workload simulates an online apparel retailer's **AI size advisor**.
-Returns are the single largest avoidable cost in online apparel, and
-"doesn't fit" is their #1 reason — so before a shopper buys the wrong
-jeans, the advisor reads their purchase-and-return history and
-recommends a size.
+An online apparel retailer runs an **AI size advisor**. When a shopper
+views a product, the advisor reads their purchase-and-return history
+and recommends a size — before the shopper buys the wrong one and
+returns it. Returns are the single largest avoidable cost in online
+apparel, and "doesn't fit" is their #1 reason.
 
-Every request the load generator sends looks like a real one:
+That advisor is the workload this bench simulates — and the shopper
+from the first paragraph is its star customer. Every request the load
+generator sends looks like theirs:
 
 ```
 Customer id: 3f9c81a2e5d47b06
@@ -74,22 +74,27 @@ results measure throughput, not text):
 > thigh than the 541 they already returned. Going up one waist size is
 > the cheapest insurance against a ninth return.*
 
-## The bottleneck: the KV-cache tax
+Pair number nine, prevented.
 
-While that answer is being generated, the GPU holds the shopper's
-*entire context* — profile, history, question — in working memory. That
-memory is the **KV cache** (key-value cache, the model's
-per-conversation short-term memory), and every shopper being served
-pays the tax for as long as their answer takes to write.
+## The bottleneck: a store with too few fitting rooms
 
-> **The memory limit:** the KV pool's size is fixed at server start.
-> When it fills, the next shopper waits in a queue.
+While that answer is being written, the GPU holds the shopper's *entire
+context* — profile, history, question — in working memory. Think of it
+as a fitting room: every shopper being served occupies one, with all
+their stuff inside, for as long as their answer takes. The corridor of
+fitting rooms is the **KV cache** (key-value cache, the model's
+per-conversation short-term memory), and it is built at server start,
+at a fixed size.
 
-vLLM can store that memory in **fp8** — 8-bit floating point, half the
-bytes of the 16-bit (bf16) default. Half the bytes means twice the
-shoppers in memory at once, on the same silicon. That left two things
-to measure: does the compression slow the answers down, and does the
-doubled capacity actually help when traffic peaks?
+> **The memory limit:** the corridor never grows. When every room is
+> taken, the queue does the growing instead.
+
+vLLM can store each shopper's memory in **fp8** — 8-bit floating point,
+half the bytes of the 16-bit (bf16) default. Same corridor, rooms half
+the size: twice as many shoppers inside at once, on the same silicon.
+That left two things to measure: does squeezing the rooms slow anyone's
+answer down, and do the extra rooms actually help when the store gets
+crowded?
 
 ## July 11, 21:02 — the server that wouldn't start
 
@@ -117,11 +122,12 @@ First real numbers, one shopper at a time (`bench-kv`):
 | 8192 |       55.3 |      56.5 |  +2.2% |
 
 **The finding is clear: at low traffic, performance is a wash (±1–3%).**
-With a single shopper, answer speed is limited by reading the model's
-own weights — measured at 79–91% of the card's peak memory bandwidth —
-so shrinking the per-shopper memory barely moves the needle. (The 1024
-row is the first cell measured and eats the GPU's warm-up; an artifact,
-not a result.)
+With one shopper in the store, the advisor's speed is limited by
+reading its own knowledge — the model's weights, measured at 79–91% of
+the card's peak memory bandwidth — not the shopper's file. Shrink the
+fitting room all you like; the clerk is busy elsewhere. (The 1024 row
+is the first cell measured and eats the GPU's warm-up; an artifact, not
+a result.)
 
 That could have been the end of the story: a compression that changes
 nothing. If fp8 had a win, it was hiding somewhere a single-shopper
@@ -135,11 +141,13 @@ both servers. This is where the evening's opening scene took place —
 the first three attempts produced clean-looking numbers that meant
 nothing:
 
-1. **The shared-host illusion.** The photocopied percentiles from the
-   top of this story. Locust's `--host` flag silently overrides each
-   user class's own target — every earlier "A/B" was one server
-   load-testing itself, 2,180 requests to 4. The Makefile now passes no
-   `--host`; each shopper class carries its own.
+1. **The shared-host illusion.** For a whole evening the two rivals
+   returned results so similar they could have been photocopies — until
+   the request counters gave the game away: one server had answered
+   2,180 requests, the other exactly four. Locust's `--host` flag
+   silently overrides each user class's own target; every earlier "A/B"
+   had been one server racing its own reflection. The Makefile now
+   passes no `--host`; each shopper class carries its own.
 2. **The smart-cache loophole.** vLLM's prefix caching deduplicates
    identical prompts — twelve shoppers with the same synthetic history
    cost the memory pool *one* copy (~7k tokens of pressure instead of
@@ -178,6 +186,9 @@ difference was how many shoppers fit inside before that happened:
 |---|---:|---:|
 | recommendations delivered in 120 s | 41 | **64 (+56%)** |
 | median time to a complete answer | 33 s | **20 s (−39%)** |
+
+Thirteen seconds may not sound like much. It is roughly the difference
+between a shopper who waits and a shopper who closes the tab.
 
 **The bottom line:** storing the advisor's working memory in fp8 costs
 nothing when the shop is quiet and serves ~1.5× the shoppers when it
