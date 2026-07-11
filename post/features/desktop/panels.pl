@@ -1,7 +1,15 @@
-%% desktop/panels — the screen-space strategy: top bar with GLOBAL MENU,
-%% titlebar widget replacing window decorations (kwin borderless), auto-hide
-%% dock, per-output kscreen autostarts. Destructive panel operations
-%% (make reset-panels / backup-plasma) stay in mk/features/Settings/Panels.
+%% desktop/panels — the screen-space strategy: top bar with GLOBAL MENU on
+%% EVERY screen, titlebar widget replacing window decorations (kwin
+%% borderless), auto-hide dock, per-output kscreen autostarts. Destructive
+%% panel operations (make reset-panels / backup-plasma) stay in
+%% mk/features/Settings/Panels.
+%%
+%% Multi-screen: Panel.screen is writable in the Plasma 6 scripting API, and
+%% screenCount/panels() enumerate live state — check and fix both run inside
+%% plasmashell via evaluateScript, so drift (a new monitor without a top bar)
+%% is detected against reality, not against appletsrc parsing. Panels whose
+%% screen disappears stay dormant in appletsrc and come back with the screen;
+%% removing them is destructive and stays in make reset-panels.
 %%
 %% Top: kppleMenu | title widget | GLOBAL MENU (appmenu) | spacer |
 %% weather (DWD Berlin-Alexanderplatz) | tray | Flex Hub | clock. The JS is
@@ -38,8 +46,10 @@ user_config(widget(Id), Check, Fix) :-
 
 top_panel_js(JS) :-
     atomic_list_concat([
+        'function mkTop(s) {',
         'var p = new Panel;',
         'p.location = "top";',
+        'p.screen = s;',
         'p.addWidget("com.github.chrtall.kppleMenu");',
         'var t = p.addWidget("com.github.antroids.application-title-bar");',
         't.currentConfigGroup = ["Appearance"];',
@@ -71,7 +81,18 @@ top_panel_js(JS) :-
         'c.writeConfig("autoFontAndSize", false);',
         'c.writeConfig("fontSize", 14);',
         'c.writeConfig("dateFormat", "custom");',
-        'c.writeConfig("customDateFormat", "dd.MM.yy |");'
+        'c.writeConfig("customDateFormat", "dd.MM.yy |");',
+        '}',
+        'var have = panels().filter(function(q) { return q.location == "top"; }).map(function(q) { return q.screen; });',
+        'for (var i = 0; i < screenCount; i++) { if (have.indexOf(i) < 0) { mkTop(i); } }'
+    ], ' ', JS).
+
+top_panel_check_js(JS) :-
+    atomic_list_concat([
+        'var have = panels().filter(function(q) { return q.location == "top"; }).map(function(q) { return q.screen; });',
+        'var m = 0;',
+        'for (var i = 0; i < screenCount; i++) { if (have.indexOf(i) < 0) { m += 1; } }',
+        'print(m == 0 ? "OK" : "MISSING" + m);'
     ], ' ', JS).
 bottom_panel_js(JS) :-
     atomic_list_concat([
@@ -93,10 +114,10 @@ user_config(plasmashell_active,
     "systemctl --user is-active plasma-plasmashell.service >/dev/null 2>&1 || ! systemctl --user list-unit-files plasma-plasmashell.service --no-legend 2>/dev/null | grep -q .",
     "systemctl --user reset-failed plasma-plasmashell.service 2>/dev/null; systemctl --user start plasma-plasmashell.service && until systemctl --user is-active plasma-plasmashell.service >/dev/null 2>&1; do sleep 1; done").
 user_config(top_panel, Check, Fix) :-
-    user_home(Home),
+    top_panel_check_js(CheckJS),
     format(atom(Check),
-        "grep -q 'location=3' ~w/.config/plasma-org.kde.plasma.desktop-appletsrc 2>/dev/null",
-        [Home]),
+        "gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell --method org.kde.PlasmaShell.evaluateScript '~w' 2>/dev/null | grep -q OK",
+        [CheckJS]),
     top_panel_js(JS),
     format(atom(Fix),
         "gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell --method org.kde.PlasmaShell.evaluateScript '~w' >/dev/null",

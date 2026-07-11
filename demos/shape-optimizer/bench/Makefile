@@ -14,15 +14,19 @@ RESULTS   := $(BENCH_DIR)/results
 MODEL_HF    ?= casperhansen/deepseek-r1-distill-qwen-7b-awq
 MODEL_LOCAL := $(MODEL_DIR)/$(notdir $(MODEL_HF))
 
-# ---- toolchain chain: uv ← venv ← deps ← model (real outputs, no sentinels) ----
+# ---- toolchain chain: uv ← venv ← deps ← model (real outputs, no sentinels).
+# Order-only (|) prerequisites: the chain encodes existence, not freshness —
+# a newer uv binary must not recreate the venv and wipe installed deps. ----
 $(UV):
 	curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Python 3.12 — llvmlite 0.44 doesn't support 3.14
-$(VENV_PY): $(UV)
-	$(UV) venv $(VENV) --python 3.12
+# Python 3.12 — llvmlite 0.44 doesn't support 3.14. --clear replaces a
+# half-created .venv non-interactively (this rule only fires when bin/python3
+# is missing, so anything it replaces was broken).
+$(VENV_PY): | $(UV)
+	$(UV) venv $(VENV) --python 3.12 --clear
 
-$(VENV)/bin/vllm: $(VENV_PY)
+$(VENV)/bin/vllm: | $(VENV_PY)
 	$(VENV_PIP) \
 	    "vllm==0.18.0" \
 	    transformers \
@@ -33,12 +37,20 @@ $(VENV)/bin/vllm: $(VENV_PY)
 	    locust
 
 # Model is public — no HF login needed.
-$(MODEL_LOCAL)/config.json: $(VENV)/bin/vllm
+$(MODEL_LOCAL)/config.json: | $(VENV)/bin/vllm
 	$(VENV_PY) -c "from huggingface_hub import snapshot_download; \
 snapshot_download('$(MODEL_HF)', local_dir='$(MODEL_LOCAL)')"
 
+# Fail fast on the wrong host: AWQ needs compute capability >=7.5, fp8 KV
+# cache >=8.0, and two 7B servers need 16 GB. This bench targets the RTX
+# A4000 (8.6) in the Crucible rig — not ServalWS's GTX 980M (5.2), where
+# vLLM dies 4 minutes in with a buried pydantic ValidationError.
 .PHONY: servers
 servers: $(MODEL_LOCAL)/config.json
+	@cap=$$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1); \
+	test -n "$$cap" || { echo ">>> no NVIDIA GPU visible (nvidia-smi failed)"; exit 1; }; \
+	awk "BEGIN { exit ($$cap >= 8.0) ? 0 : 1 }" || { \
+	    echo ">>> GPU compute capability $$cap < 8.0 — this bench needs the RTX A4000 (8.6) host"; exit 1; }
 	@echo ">>> Splitting A4000 16GB: 0.42 each, eager mode (baseline :8001, fp8 :8000)"
 	$(BENCH_DIR)/scripts/start_servers.sh "$(MODEL_LOCAL)"
 
