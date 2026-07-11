@@ -23,6 +23,9 @@
 :- use_module(library(apply)).
 :- use_module(library(readutil)).
 
+%% Helper predicates may sit beside the diagnose/1 clause they serve (XIV top-down).
+:- discontiguous diagnose/1.
+
 %% ── Entry point ──────────────────────────────────────────────────────────────
 
 main :-
@@ -35,9 +38,25 @@ main :-
     ( Result = ok([])
     -> format(user_error, '\033[32mSystem is up to date.\033[0m~n', [])
     ; Result = ok(Cmds)
-    -> catch(maplist(writeln, Cmds), error(io_error(_,_),_), true)
+    -> catch(emit_plan(Cmds), error(io_error(_,_),_), true)
     ; format(user_error,
         '\033[31mFix blocked — resolve unachievable dependencies first.\033[0m~n', [])
+    ).
+
+%% Privilege-agnostic plan: one stream, safe under `bash` and `sudo bash`.
+%% user(Cmd) fixes run only unprivileged (skipped as root — never pollute
+%% $HOME with root-owned files); root fixes sit behind a sentinel that stops
+%% an unprivileged pipe cleanly instead of spraying permission errors. The
+%% protocol is therefore `make | bash`, then `make | sudo bash` if the
+%% sentinel said so — each pipe re-senses, so any order converges (II).
+emit_plan(Cmds) :-
+    forall(( member(X, Cmds), X = user(C) ),
+           format("if [ \"$(id -u)\" != 0 ]; then ~w; fi~n", [C])),
+    ( \+ ( member(X, Cmds), X \= user(_) )
+    -> true
+    ;  format("if [ \"$(id -u)\" != 0 ]; then echo '>>> user-level fixes applied — root fixes remain, run: make | sudo bash' >&2; exit 0; fi~n", []),
+       forall(( member(X, Cmds), X \= user(_) ),
+              format("~w~n", [X]))
     ).
 
 %% ── Diagnostics ──────────────────────────────────────────────────────────────
@@ -50,10 +69,48 @@ diagnose(internet) :-
     ;  assert(failed(internet, ethernet, no_link)),
        post_fail(internet, ethernet, 'no link — check cable')
     ),
+    forall(physical_iface(If, Path), report_link_speed(If, Path)),
     ( shell_ok("resolvectl status 2>/dev/null | grep -q 'DNS Servers'")
     -> post_ok(internet, dns, configured)
     ;  post_warn(internet, dns, 'not configured via resolvectl')
     ).
+
+%% Physical NICs only: anything with a device/ entry in sysfs — this keys on
+%% hardware, so lo and virtual links (tailscale0, docker, veth) fall out for
+%% free, while USB NICs (the BMC gadget) stay in.
+physical_iface(If, Path) :-
+    expand_file_name('/sys/class/net/*', Paths),
+    member(Path, Paths),
+    atomic_list_concat([Path, '/device'], Dev),
+    exists_directory(Dev),
+    file_base_name(Path, If).
+
+%% Negotiated speed per interface, read unprivileged from sysfs. Informational
+%% (never FAIL): a down port is usually the uncabled spare, and a "slow" number
+%% is a judgement only the human can make (2.5G on a 10G port is expected on a
+%% FRITZ!Box; 100 Mb/s is a Green-Mode port or a bad cable).
+report_link_speed(If, Path) :-
+    atomic_list_concat([Path, '/operstate'], OpFile),
+    catch(read_first_line(OpFile, Op), _, Op = unknown),
+    atomic_list_concat([Path, '/carrier'], CarFile),
+    catch(read_first_line(CarFile, Car), _, Car = "0"),
+    ( Op == "up"
+    -> atomic_list_concat([Path, '/speed'], SpFile),
+       catch(read_first_line(SpFile, Sp), _, Sp = "?"),
+       format(atom(Note), '~w Mb/s', [Sp]),
+       post_ok(internet, link(If), Note)
+    ;  Car == "1"
+    -> % USB gadgets (the BMC channel) pass traffic with operstate "unknown"
+       format(atom(Note), 'carrier up (operstate ~w)', [Op]),
+       post_ok(internet, link(If), Note)
+    ;  format(atom(Note), 'no carrier (~w)', [Op]),
+       post_ok(internet, link(If), Note)
+    ).
+
+read_first_line(File, Line) :-
+    setup_call_cleanup(open(File, read, S),
+                       read_line_to_string(S, Line),
+                       close(S)).
 
 diagnose(packages) :-
     section('02', 'PACKAGES'),
@@ -225,18 +282,17 @@ generate_rules :-
     gen_user_config_rules,
     gen_top_rule.
 
-%% Fixes run as the real user with their session bus, via a quoted heredoc
-%% so quoting inside the raw fix survives the root pipe unmodified.
+%% User fixes are emitted RAW, tagged user(Cmd): the emitter guards them to run
+%% only in an unprivileged pipe (make | bash), where they execute in the
+%% caller's own session — real DISPLAY/DBus env, no sudo impersonation, no
+%% heredoc framing to corrupt, no quoting layer added. Root pipes skip them;
+%% re-sensing on the next unprivileged pipe converges what remains (II).
 gen_user_config_rules :-
-    run_as_user(User),
     forall(
         failed(user_config, Name, missing),
         ( user_config(Name, _, RawCmd),
-          format(atom(Cmd),
-              "sudo -u ~w XDG_RUNTIME_DIR=/run/user/$(id -u ~w) DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u ~w)/bus bash <<'POST_USER_EOF'~n~w~nPOST_USER_EOF",
-              [User, User, User, RawCmd]),
           ( user_config_deps(Name, Deps) -> true ; Deps = [] ),
-          assert(build_rule(user_config_applied(Name), Deps, [Cmd]))
+          assert(build_rule(user_config_applied(Name), Deps, [user(RawCmd)]))
         )
     ).
 
@@ -343,13 +399,11 @@ gen_hardening_rules :-
     ).
 
 gen_user_tool_rules :-
-    run_as_user(User),
     forall(
         failed(user_tools, Name, missing),
         ( user_tool(Name, _, RawCmd),
-          format(atom(Cmd), "sudo -u ~w -i bash -c '~w'", [User, RawCmd]),
           ( user_tool_deps(Name, Deps) -> true ; Deps = [user_tool_ready(uv)] ),
-          assert(build_rule(user_tool_ready(Name), Deps, [Cmd]))
+          assert(build_rule(user_tool_ready(Name), Deps, [user(RawCmd)]))
         )
     ).
 

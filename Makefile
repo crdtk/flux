@@ -13,7 +13,8 @@
 #       do not understand the action. An action without a traceable execution
 #       consequence is madness.
 # II.   IDEMPOTENCY & STAGING. Re-runs converge to one truth; the protocol is
-#       `make clean && make | sudo bash` (make prints the POST plan — XXII).
+#       `make clean`, then `make | bash` and `make | sudo bash` in either order
+#       until quiet (make prints the privilege-agnostic POST plan — XXII).
 #       Bootstrap deps are order-only so auto-updates never rebuild; multi-phase
 #       work stages across runs.
 # III.  DECIDE AT PARSE TIME. Sense capability into named variables — no magic
@@ -114,12 +115,18 @@
 #       the next run re-verifies. Duplicating a POST-owned state in a make
 #       recipe is a defect, not redundancy.
 # XXII. PIPE IS ACCEPTANCE. stderr is the human-readable plan, stdout the fix
-#       commands; nothing applies without `make | sudo bash`, and the human
-#       pipes — never an agent (sudo is denied to agents in depth: sudoers
-#       timestamp_timeout=0, Claude deny rule, ai-agent sandbox). Generation
-#       runs unprivileged. Secrets come from the invoking environment
-#       (TS_AUTHKEY, OPENCODE_ZEN_KEY): a rule gates on getenv and simply does
-#       not exist without its key — keyless runs WARN where naming helps.
+#       commands; nothing applies without piping, and the human pipes the root
+#       phase — never an agent (sudo is denied to agents in depth: sudoers
+#       timestamp_timeout=0, Claude deny rule, ai-agent sandbox). The plan is
+#       privilege-agnostic: one stream, each command guarded for its privilege.
+#       `make | bash` applies user-level fixes in the caller's own session
+#       (real DISPLAY/DBus, no impersonation) and stops at a sentinel naming
+#       the root phase; `make | sudo bash` applies root fixes and skips the
+#       guarded user fixes — they never run as root. Each pipe re-senses, so
+#       alternating converges (II). Generation runs unprivileged. Secrets come
+#       from the invoking environment (TS_AUTHKEY, OPENCODE_ZEN_KEY): a rule
+#       gates on getenv and simply does not exist without its key — keyless
+#       runs WARN where naming helps.
 # XXIII. GATED FACTS, BACKTRACKED CHOICES. A conditional rule is a clause whose
 #       body fails when inapplicable (has_nvidia, has_bmc): absent, not failing —
 #       POST's form of III. Competing options (display managers, sessions) are

@@ -19,10 +19,22 @@ user_config(ssh_authorized_keys, Check, Fix) :-
 user_config(ssh_config_crucible, Check, Fix) :-
     user_home(Home),
     format(atom(Check),
-        "grep -q '^Host crucible' ~w/.ssh/config 2>/dev/null", [Home]),
+        "grep -q '^Host crucible$' ~w/.ssh/config 2>/dev/null", [Home]),
     format(atom(Fix),
         "printf '%s\\n' 'Host crucible' '    HostName crucible.dns.army' '    AddressFamily inet' '    User m' '    IdentityFile ~w/.ssh/id_ed25519' '    ServerAliveInterval 60' >> ~w/.ssh/config && chmod 600 ~w/.ssh/config",
+        [Home, Home, Home]).
+%% The mDNS spelling is a separate Host block: ssh only applies User/options
+%% when the TYPED name matches a Host pattern, so `ssh crucible.local` sailed
+%% past the `Host crucible` block and fell back to the client's local username.
+%% No HostName — the typed name is already the address (LAN, DHCP-proof).
+user_config(ssh_config_crucible_local, Check, Fix) :-
+    user_home(Home),
+    format(atom(Check),
+        "grep -q '^Host crucible\\.local$' ~w/.ssh/config 2>/dev/null", [Home]),
+    format(atom(Fix),
+        "printf '%s\\n' 'Host crucible.local' '    AddressFamily inet' '    User m' '    IdentityFile ~w/.ssh/id_ed25519' '    ServerAliveInterval 60' >> ~w/.ssh/config && chmod 600 ~w/.ssh/config",
         [Home, Home, Home]).
 
 user_config_deps(ssh_authorized_keys, [user_config_applied(ssh_key)]).
 user_config_deps(ssh_config_crucible, [user_config_applied(ssh_key)]).
+user_config_deps(ssh_config_crucible_local, [user_config_applied(ssh_key)]).

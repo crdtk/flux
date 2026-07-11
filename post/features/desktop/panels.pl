@@ -117,11 +117,21 @@ bottom_panel_js(JS) :-
 user_config(plasmashell_active, Check, Fix) :-
     shell_ok("pgrep -x kwin_wayland >/dev/null || pgrep -x kwin_x11 >/dev/null"),
     Check = "systemctl --user is-active plasma-plasmashell.service >/dev/null 2>&1 || ! systemctl --user list-unit-files plasma-plasmashell.service --no-legend 2>/dev/null | grep -q .",
-    Fix = "systemctl --user reset-failed plasma-plasmashell.service 2>/dev/null; systemctl --user start plasma-plasmashell.service && until systemctl --user is-active plasma-plasmashell.service >/dev/null 2>&1; do sleep 1; done".
+    %% pkill first: a plasmashell running OUTSIDE its unit (rogue from a crash
+    %% recovery) makes the unit start collide and fail — and the wait must be
+    %% BOUNDED, or a failed start spins `until` forever and hangs the whole
+    %% `make | sudo bash` pipe (seen on crucible 2026-07-11).
+    Fix = "pkill -x plasmashell 2>/dev/null; sleep 1; systemctl --user reset-failed plasma-plasmashell.service 2>/dev/null; systemctl --user start plasma-plasmashell.service; for i in $(seq 20); do systemctl --user is-active plasma-plasmashell.service >/dev/null 2>&1 && break; sleep 1; done; systemctl --user is-active plasma-plasmashell.service".
 advisory(user_config, plasmashell_active,
          'no graphical session — panel configuration deferred to next desktop login') :-
     \+ shell_ok("pgrep -x kwin_wayland >/dev/null || pgrep -x kwin_x11 >/dev/null").
+%% Panels are gated on the same compositor probe as plasmashell_active (XXIII):
+%% without a session the rules must be ABSENT, not failing — a failing panel
+%% check whose dependency has no rule marks the goal unachievable and the
+%% planner then blocks the WHOLE plan, holding every unrelated ready fix
+%% hostage. The advisory above already tells the human it is deferred.
 user_config(top_panel, Check, Fix) :-
+    shell_ok("pgrep -x kwin_wayland >/dev/null || pgrep -x kwin_x11 >/dev/null"),
     top_panel_check_js(CheckJS),
     format(atom(Check),
         "gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell --method org.kde.PlasmaShell.evaluateScript '~w' 2>/dev/null | grep -q OK",
@@ -131,6 +141,7 @@ user_config(top_panel, Check, Fix) :-
         "gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell --method org.kde.PlasmaShell.evaluateScript '~w' >/dev/null",
         [JS]).
 user_config(bottom_panel, Check, Fix) :-
+    shell_ok("pgrep -x kwin_wayland >/dev/null || pgrep -x kwin_x11 >/dev/null"),
     user_home(Home),
     format(atom(Check),
         "grep -q 'location=4' ~w/.config/plasma-org.kde.plasma.desktop-appletsrc 2>/dev/null",

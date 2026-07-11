@@ -7,6 +7,18 @@ binary_pkg('/usr/bin/cockpit-bridge', 'cockpit cockpit-files').
 service_check(cockpit_socket,
     "systemctl is-enabled --quiet cockpit.socket",
     "systemctl enable --now cockpit.socket").
+%% The ixgbe driver does not advertise the X550's NBASE-T modes by default
+%% (old interop caution), so against the FRITZ!Box 2.5G port both sides
+%% settle on 1000 Mb/s regardless of cable or jack. Advertise mask =
+%% 100/1000/10000baseT (0x1028) + 2500baseT (bit 47) + 5000baseT (bit 48).
+%% ethtool -s is runtime-only, so the fix installs a boot oneshot covering
+%% both X550 ports (ExecStart=- tolerates the uncabled spare); the link
+%% renegotiates on apply — expect a few seconds of blip. Applicable only
+%% where a NIC actually supports 2500baseT.
+service_check(nbase_t_advertised, Check, Fix) :-
+    shell_ok("ethtool eno1 2>/dev/null | grep -q 2500baseT"),
+    Check = "ethtool eno1 2>/dev/null | sed -n '/Advertised link modes/,/pause/p' | grep -q 2500baseT",
+    Fix = "printf '[Unit]\\nDescription=Advertise NBASE-T (2.5/5G) on X550 ports\\n\\n[Service]\\nType=oneshot\\nRemainAfterExit=yes\\nExecStart=-/usr/sbin/ethtool -s eno1 advertise 0x1800000001028\\nExecStart=-/usr/sbin/ethtool -s enp13s0f1 advertise 0x1800000001028\\n\\n[Install]\\nWantedBy=multi-user.target\\n' > /etc/systemd/system/nbase-t-advertise.service && systemctl daemon-reload && systemctl enable --now nbase-t-advertise.service".
 service_check(captive_portal,
     "test -f /etc/NetworkManager/conf.d/captive-portal.conf",
     "mkdir -p /etc/NetworkManager/conf.d && printf '[connectivity]\\nuri=http://nmcheck.gnome.org/check_network_status.txt\\nresponse=NetworkManager is online\\ninterval=60\\n' > /etc/NetworkManager/conf.d/captive-portal.conf && systemctl reload NetworkManager").
