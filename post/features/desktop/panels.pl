@@ -110,9 +110,17 @@ bottom_panel_js(JS) :-
 
 %% Panels restore from appletsrc via KConfig watchers, so a dead or failed
 %% plasmashell makes every panel fix a silent no-op — recover it first.
-user_config(plasmashell_active,
-    "systemctl --user is-active plasma-plasmashell.service >/dev/null 2>&1 || ! systemctl --user list-unit-files plasma-plasmashell.service --no-legend 2>/dev/null | grep -q .",
-    "systemctl --user reset-failed plasma-plasmashell.service 2>/dev/null; systemctl --user start plasma-plasmashell.service && until systemctl --user is-active plasma-plasmashell.service >/dev/null 2>&1; do sleep 1; done").
+%% Applicable only inside a live graphical session (a running kwin): from a
+%% TTY or headless apply, starting plasmashell just dumps core against the
+%% missing display and fails the whole apply — the panel chain must be
+%% deferred (blocked deps), not crash-looped. Seen on crucible 2026-07-11.
+user_config(plasmashell_active, Check, Fix) :-
+    shell_ok("pgrep -x kwin_wayland >/dev/null || pgrep -x kwin_x11 >/dev/null"),
+    Check = "systemctl --user is-active plasma-plasmashell.service >/dev/null 2>&1 || ! systemctl --user list-unit-files plasma-plasmashell.service --no-legend 2>/dev/null | grep -q .",
+    Fix = "systemctl --user reset-failed plasma-plasmashell.service 2>/dev/null; systemctl --user start plasma-plasmashell.service && until systemctl --user is-active plasma-plasmashell.service >/dev/null 2>&1; do sleep 1; done".
+advisory(user_config, plasmashell_active,
+         'no graphical session — panel configuration deferred to next desktop login') :-
+    \+ shell_ok("pgrep -x kwin_wayland >/dev/null || pgrep -x kwin_x11 >/dev/null").
 user_config(top_panel, Check, Fix) :-
     top_panel_check_js(CheckJS),
     format(atom(Check),

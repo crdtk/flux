@@ -179,7 +179,8 @@ diagnose(user_config) :-
         ;  assert(failed(user_config, Name, missing)),
            post_fail(user_config, Name, missing)
         )
-    )).
+    )),
+    forall(advisory(user_config, Comp, Msg), post_warn(user_config, Comp, Msg)).
 
 %% Which options won the backtracking, and are the losers standby-ready?
 diagnose(selection) :-
