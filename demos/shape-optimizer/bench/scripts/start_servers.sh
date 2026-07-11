@@ -15,6 +15,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV="${SCRIPT_DIR}/../.venv"
 MODEL="${1:?Usage: start_servers.sh <model_dir>}"
 
+# vllm is invoked by absolute path (venv never activated), but the fp8 engine
+# JIT-compiles kernels at init and spawns `ninja` via PATH lookup — without
+# .venv/bin on PATH it dies with FileNotFoundError('ninja') even though ninja
+# is installed. The bf16 baseline compiles nothing, which masks this.
+export PATH="${VENV}/bin:${PATH}"
+
 _wait_healthy() {
     local port=$1 name=$2 timeout=${3:-240}
     echo ">>> waiting for ${name} on :${port} (up to ${timeout}s)..."

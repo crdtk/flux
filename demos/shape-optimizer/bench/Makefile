@@ -26,6 +26,9 @@ $(UV):
 $(VENV_PY): | $(UV)
 	$(UV) venv $(VENV) --python 3.12 --clear
 
+# ninja is a RUNTIME dep of the fp8 KV path: vllm JIT-compiles quantization
+# kernels at engine init; without it the fp8 server dies (FileNotFoundError:
+# 'ninja') while the bf16 baseline, which compiles nothing, starts fine.
 $(VENV)/bin/vllm: | $(VENV_PY)
 	$(VENV_PIP) \
 	    "vllm==0.18.0" \
@@ -34,7 +37,13 @@ $(VENV)/bin/vllm: | $(VENV_PY)
 	    pynvml \
 	    "huggingface_hub[cli]" \
 	    openai \
-	    locust
+	    locust \
+	    ninja
+
+# Converges pre-ninja venvs: the vllm marker above already exists there, so the
+# dep rule never refires — this file target backfills ninja on its own.
+$(VENV)/bin/ninja: | $(VENV)/bin/vllm
+	$(VENV_PIP) ninja
 
 # Model is public — no HF login needed.
 $(MODEL_LOCAL)/config.json: | $(VENV)/bin/vllm
@@ -45,8 +54,10 @@ snapshot_download('$(MODEL_HF)', local_dir='$(MODEL_LOCAL)')"
 # cache >=8.0, and two 7B servers need 16 GB. This bench targets the RTX
 # A4000 (8.6) in the Crucible rig — not ServalWS's GTX 980M (5.2), where
 # vLLM dies 4 minutes in with a buried pydantic ValidationError.
+# ninja is an invariant of servers (XVIII): without it the fp8 engine dies at
+# kernel-compile time, after the health wait has already burned 240s.
 .PHONY: servers
-servers: $(MODEL_LOCAL)/config.json
+servers: $(MODEL_LOCAL)/config.json $(VENV)/bin/ninja
 	@cap=$$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1); \
 	test -n "$$cap" || { echo ">>> no NVIDIA GPU visible (nvidia-smi failed)"; exit 1; }; \
 	awk "BEGIN { exit ($$cap >= 8.0) ? 0 : 1 }" || { \

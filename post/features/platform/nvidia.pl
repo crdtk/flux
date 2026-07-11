@@ -38,3 +38,14 @@ config_patch(xorg_nvidia_a4000, '/usr/lib/xorg/Xorg', Check, Fix) :-
     shell_ok("lspci 2>/dev/null | grep -q GA104GL"),
     Check = "grep -q 'NVIDIA A4000' /etc/X11/xorg.conf 2>/dev/null",
     Fix = "printf '%s\\n' 'Section \"Device\"' '    Identifier \"NVIDIA A4000\"' '    Driver     \"nvidia\"' '    Option     \"AllowEmptyInitialConfiguration\" \"true\"' 'EndSection' '' 'Section \"Screen\"' '    Identifier \"Screen0\"' '    Device     \"NVIDIA A4000\"' 'EndSection' > /etc/X11/xorg.conf".
+
+%% CUDA header vs modern glibc/gcc: math_functions.h redeclares rsqrt/rsqrtf
+%% with a trailing `noexcept` that the host compiler rejects ("expected
+%% initializer before 'noexcept'"), killing every nvcc JIT — FlashInfer's
+%% fp8-KV kernels (vLLM bench), torch inductor, any runtime compile. The
+%% bf16 path compiles nothing, which masks it. Dropping the trailer matches
+%% the exception spec of glibc's own declaration. Re-applies after every
+%% cuda-toolkit upgrade rewrites the header — exactly why it is POST-owned.
+config_patch(cuda_rsqrt_noexcept, '/usr/local/cuda/include/crt/math_functions.h', Check, Fix) :-
+    Check = "! grep -q '_NV_RSQRT_SPECIFIER) noexcept' /usr/local/cuda/include/crt/math_functions.h",
+    Fix = "sed -i 's/\\(_NV_RSQRT_SPECIFIER)\\) noexcept;/\\1;/' /usr/local/cuda/include/crt/math_functions.h".
