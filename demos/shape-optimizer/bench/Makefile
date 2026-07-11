@@ -62,6 +62,12 @@ servers: $(MODEL_LOCAL)/config.json $(VENV)/bin/ninja
 	test -n "$$cap" || { echo ">>> no NVIDIA GPU visible (nvidia-smi failed)"; exit 1; }; \
 	awk "BEGIN { exit ($$cap >= 8.0) ? 0 : 1 }" || { \
 	    echo ">>> GPU compute capability $$cap < 8.0 — this bench needs the RTX A4000 (8.6) host"; exit 1; }
+# Desktop-on-GPU is a provenance fact, not a blocker (warn, continue): an idle
+# desktop costs ~1-3% of absolute tok/s and thins the VRAM margin at engine
+# init, but is common-mode for the A/B delta. Headless runs: log out, or
+# `sudo systemctl stop lightdm`. pmon type column: G = graphics client.
+	@g=$$(nvidia-smi pmon -c 1 2>/dev/null | awk '$$3 == "G"' | wc -l); \
+	[ "$$g" -eq 0 ] || echo ">>> WARNING: $$g graphics process(es) on the GPU (desktop/X) — absolute numbers carry ~1-3% noise and init VRAM margin is reduced; the fp8-vs-base delta is unaffected"
 	@echo ">>> Splitting A4000 16GB: 0.42 each, eager mode (baseline :8001, fp8 :8000)"
 	$(BENCH_DIR)/scripts/start_servers.sh "$(MODEL_LOCAL)"
 
