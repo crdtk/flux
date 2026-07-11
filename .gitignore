@@ -3,11 +3,8 @@
 .claude/settings.local.json
 
 # Working files
-COMMIT.md
+COMMIT_MESSAGE.md
 
-# Reference material — PDFs regenerate with `make references`; the rest is
-# personal (LinkedIn profile drafts, recruiter outreach) and must never
-# reach this public repo
 References/
 
 # Build artifacts
