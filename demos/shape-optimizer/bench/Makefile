@@ -60,9 +60,9 @@ servers-stop:
 
 define REQUIRE_SERVERS
 	@curl -sf http://localhost:8001/health >/dev/null 2>&1 || \
-	    { echo ">>> baseline server not running — run: make servers"; exit 1; }
+	    { echo ">>> baseline server not running — run: make servers (on the A4000 host: this is $$(hostname))"; exit 1; }
 	@curl -sf http://localhost:8000/health >/dev/null 2>&1 || \
-	    { echo ">>> fp8 server not running — run: make servers"; exit 1; }
+	    { echo ">>> fp8 server not running — run: make servers (on the A4000 host: this is $$(hostname))"; exit 1; }
 endef
 
 .PHONY: bench-kv
