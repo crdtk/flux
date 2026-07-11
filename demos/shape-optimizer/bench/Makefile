@@ -82,16 +82,37 @@ define REQUIRE_SERVERS
 	    { echo ">>> fp8 server not running — run: make servers (on the A4000 host: this is $$(hostname))"; exit 1; }
 endef
 
+# Live KV-pressure dashboard — run in a second terminal during a bench. The three
+# gauges ARE the capacity experiment: waiting>0 or cache_usage pinned near 1.0 on
+# one server but not the other is the fp8-vs-bf16 separation, observed directly.
+.PHONY: watch-kv
+watch-kv:
+	$(REQUIRE_SERVERS)
+	@watch -n1 'for p in 8001 8000; do echo "── :$$p ──"; curl -s http://localhost:$$p/metrics | grep -E "^vllm:(num_requests_running|num_requests_waiting|gpu_cache_usage_perc)"; done'
+
 .PHONY: bench-kv
 bench-kv: $(VENV)/bin/vllm
 	$(REQUIRE_SERVERS)
 	cd $(BENCH_DIR) && $(VENV_PY) kv_bench/sweep.py
 	@echo ">>> results: $(RESULTS)/bench_results.json — commit it"
 
+# Interactive load dashboard: live RPS/latency charts at http://localhost:8089.
+# Set users/rate in the web UI; Ctrl-C here to stop. Headless bench-locust below
+# stays the reproducible CSV path.
+.PHONY: locust-web
+locust-web: $(VENV)/bin/vllm
+	$(REQUIRE_SERVERS)
+	cd $(BENCH_DIR) && $(VENV)/bin/locust -f kv_bench/locustfile.py
+
+# LOCUST_CLASS: BaselineUser or FP8User for a SERIAL run (both classes when
+# empty). Concurrent classes share the A4000's compute: at saturation both
+# servers degrade in lockstep and the KV-capacity difference cannot express —
+# serial runs at identical offered load are the clean capacity A/B.
 .PHONY: bench-locust
 LOCUST_USERS ?= 4
 LOCUST_RATE  ?= 1
 LOCUST_TIME  ?= 60s
+LOCUST_CLASS ?=
 bench-locust: $(VENV)/bin/vllm
 	$(REQUIRE_SERVERS)
 	@mkdir -p $(RESULTS)
@@ -99,8 +120,12 @@ bench-locust: $(VENV)/bin/vllm
 	    -f kv_bench/locustfile.py \
 	    --headless \
 	    -u $(LOCUST_USERS) -r $(LOCUST_RATE) -t $(LOCUST_TIME) \
-	    --csv $(RESULTS)/locust \
-	    --host http://localhost:8000
+	    --csv $(RESULTS)/locust$(if $(LOCUST_CLASS),-$(LOCUST_CLASS),) \
+	    $(LOCUST_CLASS)
+# NO --host here: the CLI flag OVERRIDES every user class's host attribute, which
+# silently sent BaselineUser traffic to :8000 too — every locust "A/B" was one
+# server load-testing itself (identical percentiles; :8001 counters at 4 requests
+# while :8000 held 2,180). The classes carry their own hosts.
 	@echo ">>> results: $(RESULTS)/locust_stats.csv — commit it"
 
 .PHONY: clean
