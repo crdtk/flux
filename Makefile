@@ -150,6 +150,25 @@
 #       story-local probes stay with their story, shared gates live in the
 #       engine; a fact folds into its arena's tools module until it accretes a
 #       gate or a second fact type.
+# XXVI. CHANNELS ARE INDEPENDENT FAILURE DOMAINS. Where a function has parallel
+#       hardware paths — display outputs are the clearest case (GPU DisplayPort
+#       vs BMC/VGA) — each path is its own fault-containment region: dissimilar
+#       driver stack, dedicated config artifact, independent health check and
+#       recovery. A fault in one channel must be structurally unable to disable
+#       or block another — no shared config, no shared fate (a monolithic
+#       xorg.conf wiring the whole desktop to one driver is the anti-pattern that
+#       dropped us to an 800x600 firmware framebuffer while a healthy head sat
+#       dark). One channel is the SURVIVOR: lowest capability, highest robustness
+#       (the BMC head + iKVM, alive with the GPU driver dead) — POST guarantees it
+#       reachable and never gates it off. Redundancy counts only when DISSIMILAR;
+#       identical heads share common-mode faults. Latent faults are hunted, not
+#       tolerated — a connected-but-dark output is a backup discovered dead only
+#       when the primary fails, so POST WARNs on it every run. Never assume the
+#       environment (a "no monitor here" constant reality falsifies is a latent
+#       fault); derive config from what is sensed. The invariants — independence,
+#       idempotence, re-sensing, drift-detection — are satisfiable only by a
+#       per-channel POST rule, so "encode it in Prolog" is not a separate
+#       instruction but the only shape that obeys this article.
 #
 # ==========================================================
 
