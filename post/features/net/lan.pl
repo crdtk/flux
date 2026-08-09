@@ -1,6 +1,13 @@
 %% net/lan — serving and using the apartment LAN: Cockpit admin UI,
 %% NetworkManager captive-portal probing, password-SSH only from the local
-%% subnet, and the avahi-discovered HP printer.
+%% subnet, and the avahi-discovered HP MFP (both functions: print + scan).
+
+%% The MFP's scanner: it advertises driverless eSCL (_uscan._tcp), so
+%% sane-airscan auto-discovers it over mDNS — no lpadmin-style config, just the
+%% backend + a frontend. simple-scan is Ubuntu's "Document Scanner". These live
+%% with the printer (XXV): removing the MFP retires both.
+binary_pkg('/usr/lib/x86_64-linux-gnu/sane/libsane-airscan.so.1', 'sane-airscan').
+binary_pkg('/usr/bin/simple-scan', 'simple-scan').
 
 binary_pkg('/usr/bin/cockpit-bridge', 'cockpit cockpit-files').
 %% Both machines must accept SSH — the repo's origin is a peer clone

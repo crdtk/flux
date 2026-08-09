@@ -31,7 +31,7 @@
 main :-
     set_stream(user_error, buffer(false)),
     maplist(diagnose, [internet, packages, repos, hardening, patches, desktop,
-                       user_tools, services, selection, user_config]),
+                       user_tools, services, selection, user_config, display]),
     nl(user_error),
     generate_rules,
     collect(system_ready, [], _, Result),
@@ -112,6 +112,77 @@ read_first_line(File, Line) :-
                        read_line_to_string(S, Line),
                        close(S)).
 
+%% ── Display channels (constitution XXVI) ─────────────────────────────────────
+%% Each physical output is a parallel channel on a DISSIMILAR driver stack; the
+%% module (platform/display) names them. This is pure telemetry: report each
+%% channel's live health, flag any connected-but-dark connector (a latent-dark
+%% backup — VI), and verify the survivor channel (BMC + iKVM) is reachable
+%% regardless of GPU state (II). The config fixes are config_patch entries, so
+%% they flow through the patches arena — this section only observes.
+diagnose(display) :-
+    section('11', 'DISPLAY'),
+    forall(display_channel(Name, Driver, Role, Desc),
+           report_channel(Name, Driver, Role, Desc)),
+    report_dark_connectors,
+    report_survivor.
+
+%% PRIME roles (XXVI). The SPINE (ASPEED) boots the desktop: down = loud WARN, the
+%% mission is at risk. The OFFLOAD provider (A4000) only accelerates: down is
+%% degraded-but-safe (post_ok, visible, not a failure — XXIII), the desktop is
+%% unaffected. Channel is "up" when its DRM driver is bound to a card.
+report_channel(Name, Driver, spine, Desc) :-
+    ( channel_driver_bound(Driver)
+    -> format(atom(N), 'spine up — ~w', [Desc]),
+       post_ok(display, channel(Name), N)
+    ;  format(atom(N), 'SPINE DOWN — ~w not bound — desktop at risk — ~w', [Driver, Desc]),
+       post_warn(display, channel(Name), N)
+    ).
+report_channel(Name, Driver, offload, Desc) :-
+    ( channel_driver_bound(Driver)
+    -> format(atom(N), 'offload available — ~w', [Desc]),
+       post_ok(display, channel(Name), N)
+    ;  format(atom(N), 'offload unavailable (~w not bound) — desktop unaffected, prime-run inert', [Driver]),
+       post_ok(display, channel(Name), N)
+    ).
+
+channel_driver_bound(Driver) :-
+    format(atom(Cmd),
+        "for d in /sys/class/drm/card[0-9]/device/driver; do [ \"$(basename \"$(readlink -f \"$d\" 2>/dev/null)\")\" = ~w ] && exit 0; done; exit 1",
+        [Driver]),
+    shell_ok(Cmd).
+
+drm_attr(Dir, Attr, Val) :-
+    atomic_list_concat([Dir, '/', Attr], F),
+    read_first_line(F, Val).
+
+dark_connector(Name) :-
+    expand_file_name('/sys/class/drm/card*-*', Cs),
+    member(C, Cs),
+    catch(drm_attr(C, status, "connected"), _, fail),
+    catch(drm_attr(C, enabled, "disabled"), _, fail),
+    file_base_name(C, Name).
+
+report_dark_connectors :-
+    ( dark_connector(_)
+    -> forall(dark_connector(C),
+              post_warn(display, C,
+                  'connected but dark — a latent-dark backup, unlit until the day you need it (XXVI.VI)'))
+    ;  post_ok(display, connectors, 'every connected output is lit')
+    ).
+
+%% The spine is also the survivor: verify its out-of-band lifeline (iKVM) so a
+%% botched X config can never fully lock the operator out (XXVI.II).
+report_survivor :-
+    ( display_channel(_, Driver, spine, _), channel_driver_bound(Driver)
+    -> ( shell_ok("test -e /dev/ipmi0")
+       -> post_ok(display, lifeline, 'spine bound + iKVM reachable — operator never locked out')
+       ;  post_warn(display, lifeline,
+              'spine up but /dev/ipmi0 absent — iKVM lifeline unverified')
+       )
+    ;  post_warn(display, lifeline,
+           'spine driver not bound — X has no robust device to boot on (XXVI.II)')
+    ).
+
 diagnose(packages) :-
     section('02', 'PACKAGES'),
     forall(binary_pkg(Bin, Pkg), (
@@ -155,7 +226,8 @@ diagnose(hardening) :-
         ;  assert(failed(hardening, Name, missing)),
            post_fail(hardening, Name, missing)
         )
-    )).
+    )),
+    forall(advisory(hardening, Comp, Msg), post_warn(hardening, Comp, Msg)).
 
 diagnose(patches) :-
     section('05', 'PATCHES'),
@@ -572,7 +644,7 @@ has_nvidia :- shell_ok("lspci 2>/dev/null | grep -qi nvidia").
              candidate/2, viable/2, dm_installed/1, dm_session_check/2,
              dm_session_fix/2, active_display_manager/1,
              saved_session_is_x11/0, session_rule/2,
-             demotion_reason/3, advisory/3.
+             demotion_reason/3, advisory/3, display_channel/4.
 :- discontiguous binary_pkg/2, deb_install/1, deb_source/3, apt_repo/3,
              pkg_repo/2, opt_install/3, opt_install_deps/2, desktop_fix/3,
              config_patch/4, hardening_check/3, service_check/3,
@@ -581,7 +653,7 @@ has_nvidia :- shell_ok("lspci 2>/dev/null | grep -qi nvidia").
              candidate/2, viable/2, dm_installed/1, dm_session_check/2,
              dm_session_fix/2, active_display_manager/1,
              saved_session_is_x11/0, session_rule/2,
-             demotion_reason/3, advisory/3.
+             demotion_reason/3, advisory/3, display_channel/4.
 
 %% Feature modules — one file per revocable decision, grouped into the
 %% arenas of this build (base, platform, net, desktop, dev, agents,
