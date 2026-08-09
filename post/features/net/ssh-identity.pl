@@ -35,6 +35,24 @@ user_config(ssh_config_crucible_local, Check, Fix) :-
         "printf '%s\\n' 'Host crucible.local' '    AddressFamily inet' '    User m' '    IdentityFile ~w/.ssh/id_ed25519' '    ServerAliveInterval 60' >> ~w/.ssh/config && chmod 600 ~w/.ssh/config",
         [Home, Home, Home]).
 
+%% Peer authorization: each machine generates its OWN keypair and
+%% self-authorizes, so the rig's key is unknown here until fetched.
+%% origin is a peer clone (rig ⇄ laptop) — for the rig to fetch/push
+%% back, its pubkey must sit in this machine's authorized_keys. The
+%% already-working outbound direction delivers it: pull the key over
+%% ssh, append if absent. Applicable only when the rig answers with
+%% key auth (BatchMode) — offline rig is a skip, not a failure.
+user_config(ssh_rig_key_authorized, Check, Fix) :-
+    shell_ok("timeout 8 ssh -o BatchMode=yes -o ConnectTimeout=5 crucible.local true"),
+    user_home(Home),
+    format(atom(Check),
+        "ssh -o BatchMode=yes crucible.local cat .ssh/id_ed25519.pub 2>/dev/null | grep -qxFf - ~w/.ssh/authorized_keys",
+        [Home]),
+    format(atom(Fix),
+        "KEY=$(ssh -o BatchMode=yes crucible.local cat .ssh/id_ed25519.pub) && test -n \"$KEY\" && echo \"$KEY\" >> ~w/.ssh/authorized_keys && chmod 600 ~w/.ssh/authorized_keys",
+        [Home, Home]).
+
 user_config_deps(ssh_authorized_keys, [user_config_applied(ssh_key)]).
 user_config_deps(ssh_config_crucible, [user_config_applied(ssh_key)]).
 user_config_deps(ssh_config_crucible_local, [user_config_applied(ssh_key)]).
+user_config_deps(ssh_rig_key_authorized, [user_config_applied(ssh_config_crucible_local)]).

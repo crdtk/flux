@@ -3,6 +3,11 @@
 %% subnet, and the avahi-discovered HP printer.
 
 binary_pkg('/usr/bin/cockpit-bridge', 'cockpit cockpit-files').
+%% Both machines must accept SSH — the repo's origin is a peer clone
+%% (rig ⇄ laptop), and only the rig happened to ship sshd. The
+%% ssh_lan_password/sshd_answers rules below guard on this binary:
+%% first apply installs it, the next POST run senses and configures it.
+binary_pkg('/usr/sbin/sshd', 'openssh-server').
 
 service_check(cockpit_socket,
     "systemctl is-enabled --quiet cockpit.socket",
@@ -46,6 +51,18 @@ service_check(ssh_lan_password,
 %% A malformed drop-in must be rewritten before restarting sshd, or the
 %% restart just reproduces the parse failure.
 service_deps(sshd_answers, [service_ready(ssh_lan_password)]).
+%% Scanner: the same MFP scans only via eSCL/WSD, which sane-airscan
+%% drives fine. HPLIP's hpaio backend (3.24.4) still advertises the
+%% device over mDNS but cannot open it — "Error during device I/O" —
+%% so every scan app offers a dead hpaio entry beside the working
+%% airscan one, and picking it looks like a broken scanner. Disable
+%% hpaio at the SANE dll.d snippet. Config state is probed directly
+%% (not scanimage -L: slow, and needs the printer awake). Applicable
+%% only where HPLIP installed its snippet — otherwise skip.
+service_check(scanner_hpaio_disabled, Check, Fix) :-
+    shell_ok("test -f /etc/sane.d/dll.d/hplip"),
+    Check = "! grep -q '^hpaio' /etc/sane.d/dll.d/hplip",
+    Fix = "sed -i 's/^hpaio/# hpaio (dead for LaserJet Tank 260x - sane-airscan serves it)/' /etc/sane.d/dll.d/hplip".
 %% Printer: applicable when already configured (verify) or currently
 %% discoverable on the LAN (configure) — otherwise skipped, not failed.
 service_check(printer_lpadmin, Check, Fix) :-

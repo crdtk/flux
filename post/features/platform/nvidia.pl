@@ -39,6 +39,19 @@ config_patch(xorg_nvidia_a4000, '/usr/lib/xorg/Xorg', Check, Fix) :-
     Check = "grep -q 'NVIDIA A4000' /etc/X11/xorg.conf 2>/dev/null",
     Fix = "printf '%s\\n' 'Section \"Device\"' '    Identifier \"NVIDIA A4000\"' '    Driver     \"nvidia\"' '    Option     \"AllowEmptyInitialConfiguration\" \"true\"' 'EndSection' '' 'Section \"Screen\"' '    Identifier \"Screen0\"' '    Device     \"NVIDIA A4000\"' 'EndSection' > /etc/X11/xorg.conf".
 
+%% No BusID in xorg.conf, ever — ported 2026-08-09 from the stale rig
+%% clone's uncommitted Makefile (XORG_BUSID_OK logic). A BusID pins X
+%% to one PCIe address; moving the GPU behind a switch/backplane (or
+%% reseating it) changes the address and X dies at boot. The a4000
+%% rule above writes a fresh BusID-free conf for the bench GPU; this
+%% one scrubs BusID from ANY existing xorg.conf on any NVIDIA host —
+%% including the future 4x RTX PRO 6000 build the a4000 gate ignores.
+%% Guard: only fires when an xorg.conf exists at all.
+config_patch(xorg_no_busid, '/etc/X11/xorg.conf', Check, Fix) :-
+    has_nvidia,
+    Check = "! grep -q BusID /etc/X11/xorg.conf",
+    Fix = "sed -i '/BusID/d' /etc/X11/xorg.conf".
+
 %% CUDA header vs modern glibc/gcc: math_functions.h redeclares rsqrt/rsqrtf
 %% with a trailing `noexcept` that the host compiler rejects ("expected
 %% initializer before 'noexcept'"), killing every nvcc JIT — FlashInfer's
