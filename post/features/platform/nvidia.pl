@@ -29,15 +29,38 @@ hardening_check(nvidia_power, Check, Fix) :-
     has_nvidia,
     Check = "test -f /etc/modprobe.d/nvidia-power.conf",
     Fix = "printf 'options nvidia NVreg_PreserveVideoMemoryAllocations=1\\noptions nvidia NVreg_TemporaryFilePath=/tmp\\n' > /etc/modprobe.d/nvidia-power.conf".
+%% The nvidia module must match BOTH the running kernel AND the installed driver
+%% (XXVI offload channel). Ubuntu's precompiled modules make this a version dance:
+%% each kernel's module package is built against ONE driver release, and an older
+%% kernel's module lags the current driver (7.0.0-27's module Depends
+%% nvidia-kernel-common-595 <= 595.71.05, unco-installable with the 595.84 now
+%% present). So the ONLY kernel guaranteed a driver-matching module is the LATEST,
+%% tracked by the -generic meta. Therefore: auto-fix ONLY when running the latest
+%% kernel (install meta → matching module → modprobe); when running an OLDER
+%% kernel, do not fight apt — advise a reboot (below, XXIV). Branch+flavor <bf>
+%% (e.g. 595-open) is DERIVED from the installed module (XXVI.IV — no hardcode).
+hardening_check(nvidia_module_tracks_kernel, Check, Fix) :-
+    has_nvidia,
+    shell_ok("test \"$(uname -r)\" = \"$(ls -1 /boot/vmlinuz-* 2>/dev/null | sed 's#.*vmlinuz-##' | sort -V | tail -1)\""),
+    Check = "modinfo nvidia >/dev/null 2>&1",
+    Fix = "bf=$(dpkg-query -W -f='${Package}\\n' 'linux-modules-nvidia-*' 2>/dev/null | grep -E '[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]+-generic$' | head -1 | sed -E 's/^linux-modules-nvidia-//; s/-[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]+-generic$//'); test -n \"$bf\" && apt-get install -y \"linux-modules-nvidia-$bf-generic\" && depmod -a && modprobe nvidia nvidia_drm".
 
-%% Single-screen X11 on the bench A4000: the ASPEED BMC head has no monitor
-%% and parks plasmashell panels on a phantom output, so X drives the GPU
-%% only. Applies at next login — never restart the DM for it (that tears
-%% down the session and resets the KScreen layout).
-config_patch(xorg_nvidia_a4000, '/usr/lib/xorg/Xorg', Check, Fix) :-
-    shell_ok("lspci 2>/dev/null | grep -q GA104GL"),
-    Check = "grep -q 'NVIDIA A4000' /etc/X11/xorg.conf 2>/dev/null",
-    Fix = "printf '%s\\n' 'Section \"Device\"' '    Identifier \"NVIDIA A4000\"' '    Driver     \"nvidia\"' '    Option     \"AllowEmptyInitialConfiguration\" \"true\"' 'EndSection' '' 'Section \"Screen\"' '    Identifier \"Screen0\"' '    Device     \"NVIDIA A4000\"' 'EndSection' > /etc/X11/xorg.conf".
+%% Running an older kernel than the driver's module targets: the module can't be
+%% force-installed (version skew above), so the cure is a reboot into the latest
+%% kernel (GRUB default). Human-only (XXIV) — POST never reboots.
+advisory(hardening, nvidia_boot_latest_kernel,
+    'nvidia module absent for the running kernel and its package lags the installed driver — reboot into the latest kernel (GRUB default) so the module matches; desktop stays up on the VGA spine meanwhile') :-
+    has_nvidia,
+    \+ shell_ok("modinfo nvidia >/dev/null 2>&1"),
+    \+ shell_ok("test \"$(uname -r)\" = \"$(ls -1 /boot/vmlinuz-* 2>/dev/null | sed 's#.*vmlinuz-##' | sort -V | tail -1)\"").
+
+%% X11 GPU-head configuration moved to platform/display (XXV: one decision, one
+%% module; XXVI: it is one display CHANNEL among several, not an nvidia-private
+%% fact). The old monolithic /etc/X11/xorg.conf here wired the entire desktop to
+%% this driver — when the driver dropped, X fell to an 800x600 firmware
+%% framebuffer while a healthy head sat dark. display.pl now writes a per-channel
+%% xorg.conf.d fragment and retires the monolith. The former baked assumption
+%% ("the ASPEED head has no monitor") was exactly the XXVI.IV violation.
 
 %% CUDA header vs modern glibc/gcc: math_functions.h redeclares rsqrt/rsqrtf
 %% with a trailing `noexcept` that the host compiler rejects ("expected

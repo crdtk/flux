@@ -26,6 +26,20 @@ service_check(prometheus_running, Check, Fix) :-
 service_deps(prometheus_running,
     [service_ready(prometheus_port), service_ready(prometheus_scrapes_vllm)]).
 
+%% grafana 13's postinst mv's its bundled-plugins dir into /var/lib/grafana and
+%% fails when a non-empty copy from a prior/partial install is already there
+%% ("cannot overwrite ... Directory not empty") — leaving grafana "unpacked, not
+%% configured", which jams apt for every later package too. Clear the stale dest
+%% and finish configuring. Gated on grafana being at least unpacked; idempotent
+%% (once "install ok installed" the check passes). Prereq of every grafana rule
+%% below — datasource/dashboard write paths the postinst creates.
+service_check(grafana_configured, Check, Fix) :-
+    shell_ok("dpkg -s grafana >/dev/null 2>&1"),
+    Check = "dpkg -s grafana 2>/dev/null | grep -q 'Status: install ok installed'",
+    Fix = "rm -rf /var/lib/grafana/plugins-bundled && dpkg --configure grafana".
+service_deps(grafana_prom_datasource, [service_ready(grafana_configured)]).
+service_deps(grafana_vllm_dashboard, [service_ready(grafana_configured)]).
+
 service_check(grafana_prom_datasource, Check, Fix) :-
     Check = "test -f /etc/grafana/provisioning/datasources/prometheus.yaml",
     Fix = "printf '%s\\n' 'apiVersion: 1' 'datasources:' '- name: Prometheus' '  type: prometheus' '  access: proxy' '  url: http://localhost:9095' '  isDefault: true' > /etc/grafana/provisioning/datasources/prometheus.yaml".

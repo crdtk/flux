@@ -17,6 +17,11 @@ binary_pkg('/usr/bin/jq',            jq).
 binary_pkg('/usr/bin/kdenlive',      kdenlive).
 binary_pkg('/usr/bin/digikam',       digikam).
 binary_pkg('/usr/bin/obs',           'obs-studio').
+binary_pkg('/usr/bin/blender',       blender).
+binary_pkg('/usr/bin/xournalpp',     xournalpp).
+binary_pkg('/usr/bin/AusweisApp',    ausweisapp).
+binary_pkg('/usr/bin/vlc',           vlc).
+binary_pkg('/usr/bin/bleachbit',     bleachbit).
 binary_pkg('/usr/bin/git',           git).
 binary_pkg('/usr/sbin/avahi-daemon', 'avahi-daemon').
 binary_pkg('/usr/sbin/arp-scan',     'arp-scan').
