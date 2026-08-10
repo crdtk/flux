@@ -14,6 +14,7 @@ binary_pkg('/usr/bin/plank',         plank).
 binary_pkg('/usr/bin/rclone',        rclone).
 binary_pkg('/usr/bin/xclip',         xclip).
 binary_pkg('/usr/bin/jq',            jq).
+binary_pkg('/usr/bin/convert',       imagemagick).
 binary_pkg('/usr/bin/bleachbit',     bleachbit).
 
 %% Blender comes from blender.org, not the archive: distro builds are
@@ -30,11 +31,9 @@ opt_install(blender_official, '/opt/blender/blender', Cmd) :-
 binary_pkg('/usr/bin/kdenlive',      kdenlive).
 binary_pkg('/usr/bin/digikam',       digikam).
 binary_pkg('/usr/bin/obs',           'obs-studio').
-binary_pkg('/usr/bin/blender',       blender).
 binary_pkg('/usr/bin/xournalpp',     xournalpp).
 binary_pkg('/usr/bin/AusweisApp',    ausweisapp).
 binary_pkg('/usr/bin/vlc',           vlc).
-binary_pkg('/usr/bin/bleachbit',     bleachbit).
 binary_pkg('/usr/bin/git',           git).
 
 %% Git edits (commit messages, rebase todos) open in vi — system tier

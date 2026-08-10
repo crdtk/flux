@@ -62,18 +62,12 @@ advisory(hardening, nvidia_boot_latest_kernel,
 %% xorg.conf.d fragment and retires the monolith. The former baked assumption
 %% ("the ASPEED head has no monitor") was exactly the XXVI.IV violation.
 
-%% No BusID in xorg.conf, ever — ported 2026-08-09 from the stale rig
-%% clone's uncommitted Makefile (XORG_BUSID_OK logic). A BusID pins X
-%% to one PCIe address; moving the GPU behind a switch/backplane (or
-%% reseating it) changes the address and X dies at boot. The a4000
-%% rule above writes a fresh BusID-free conf for the bench GPU; this
-%% one scrubs BusID from ANY existing xorg.conf on any NVIDIA host —
-%% including the future 4x RTX PRO 6000 build the a4000 gate ignores.
-%% Guard: only fires when an xorg.conf exists at all.
-config_patch(xorg_no_busid, '/etc/X11/xorg.conf', Check, Fix) :-
-    has_nvidia,
-    Check = "! grep -q BusID /etc/X11/xorg.conf",
-    Fix = "sed -i '/BusID/d' /etc/X11/xorg.conf".
+%% (The stale clone's "no BusID ever" idea was ported here 2026-08-09
+%% and dropped the same day: display.pl solves the underlying problem
+%% — a pinned PCIe address dying on topology change — the right way,
+%% with per-channel fragments whose BusIDs are SENSED at apply time
+%% and re-sensed every run. Omission was the crude fix; sensing is
+%% the correct one.)
 
 %% CUDA header vs modern glibc/gcc: math_functions.h redeclares rsqrt/rsqrtf
 %% with a trailing `noexcept` that the host compiler rejects ("expected
