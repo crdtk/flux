@@ -277,6 +277,13 @@ sync: SYNC_DIR = .
 sync: SYNC += --exclude=/.*
 sync: sync-push sync-pull
 
+# Converge POST on the rig from here: root pass then user pass (XXII —
+# either order until quiet). ssh -t allocates the TTY sudo needs for
+# its password prompt; expect the rig's sudo to ask once.
+.PHONY: rig-post
+rig-post:
+	ssh -t crucible.local 'cd ~/Desktop/Projects/flux && make | sudo bash && make | bash'
+
 # Which Cycles render devices the installed Blender actually sees —
 # OPTIX rows prove the official build's GPU kernels are live (the
 # distro build never shows them; that gap is why blender.org owns the
