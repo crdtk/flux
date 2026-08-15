@@ -1,0 +1,229 @@
+@startuml stack
+' GLASKÖRPER vessels demo — DRY tool/format dependency map, SRP design.
+' TOOLS float boxless at their natural position in the flow — pink fill
+' marks the bespoke surface, plain fill is off-the-shelf. Every pink box
+' has exactly ONE output cylinder (Single Responsibility drawn as a
+' picture). Cylinders are the file seams between processes: Make is the
+' orchestrator, so stages cache and parallelize for free.
+' USD was deliberately REMOVED (2026-08-10): with the customer chain
+' Blender-free, USD served only the operator's Cycles build — geometry
+' files + looks.json are the leaner truth. The interchange door reopens
+' the day a second renderer is real, on the same file seams.
+title Vessels demo — DRY design: tools, formats, boundaries
+caption cylinder = working data, rebuilt on demand (green = customer-owned, gold = operator-owned) · file = authored/irreplaceable truth · pink = our own code (the entire bespoke surface — everything else is off-the-shelf) · solid = runs today · dashed = next in the catalog, slots into the same interfaces\nGPU capability is detected automatically — the same pipeline runs on a laptop or accelerates on server GPUs
+
+skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+skinparam linetype ortho
+
+actor "patient / customer" as patient
+actor "operator / team" as operator
+
+file "web-access-code PDF\nclinic hand-off, the terminal source" as pdf #Honeydew
+file "DICOM.zip" as zip #Honeydew
+note right of pdf
+  the ONLY manual step in the whole
+  pipeline: the patient downloads
+  their scan from the clinic once.
+  Everything after is one command.
+end note
+
+file "looks.json\nthe look catalog — ONE source,\nread by scene build and export alike" as looks #Gold
+
+database "DICOM/ — *.dcm per slice" as dcm
+database "*.nii.gz — NIfTI-1 volume + affine\n*.json — BIDS sidecar (provenance, on disk)" as nii
+database "work/head.nii.gz\nhead mask (dark mode)" as headmask
+database "work/seg/brain.nii.gz\nlearned brain mask" as segmask
+database "work/vesselness.nii.gz\nFrangi response field" as vesnii
+database "work/mask.nii.gz\nthe extraction DECISION\n(threshold + anatomy gate)" as maskcyl
+database "work/vessels.ply\nlumen mesh (mm)" as plyv
+database "work/brain.ply\nshell mesh (mm, dark mode)" as plyb
+database "work/flow.json\nspline threads (mm)" as flowj
+database "operator/heuristics-vessels-garbage.png\nextraction QC: vessels or garbage?" as overlay #Gold
+database "operator/void.png\nhero still (team-reviewed asset)" as png #Gold
+database "operator/scene.blend\ninteractive truth" as blend #Gold
+database "work/vessels.glb\npre-compression intermediate" as glbfile
+database "customer/vessels.opt.glb\ndraco web+AR model" as optglb #Honeydew
+
+' off-the-shelf specialists
+[c3d\nhead mask pipeline] as c3dhead
+note as c3dnote
+  proven open-source medical imaging
+  tool (used in hospitals and research
+  for 15+ years) — zero licensing
+  cost, replaces code we would
+  otherwise write and maintain
+end note
+c3dnote .. c3dhead
+
+[TotalSegmentator\nlearned brain label] as tseg
+note as tsegnote
+  AI that recognizes 50+ anatomical
+  structures, running on OUR hardware —
+  no cloud fees, no patient data leaving
+  the machine. Pay-per-use design: its
+  cost loads only when a customer tier
+  needs it
+end note
+tsegnote .. tseg
+
+[Blender CLI\nrenders the cached .blend] as rendercli
+[gltf-transform via npx\ndraco web GLB] as gtx
+note as gtxnote
+  industry-standard compression makes
+  the 3D model ~10x smaller — fast
+  loading on any phone or browser,
+  no app install
+end note
+gtxnote .. gtx
+
+' custom scripts: pink, boxless, ONE output each (SRP)
+[frangi_field.py\ntube-likelihood field] as frangi #Pink
+note as frangnote
+  the core analysis runs anywhere — a
+  laptop works; on server-grade GPUs the
+  same code runs ~30x faster with zero
+  changes. Compute cost scales down to
+  near-zero, up to real-time
+end note
+frangnote .. frangi
+
+[tube_mask.py\nthreshold + anatomy gate] as tmask #Pink
+note as tmasknote
+  self-upgrading design: when the AI
+  tier is active its results are used
+  automatically — no reconfiguration,
+  no second code path to maintain
+end note
+tmasknote .. tmask
+
+[lumen_mesh.py] as lmesh #Pink
+[shell_mesh.py\n(dark mode)] as smesh #Pink
+[flow_threads.py\nskan branch paths] as fthreads #Pink
+[overlay_qc.py (nilearn)\nplots the decision itself] as oqc #Pink
+note as oqcnote
+  automatic quality snapshot for every
+  scan: shows exactly what the analysis
+  decided, over the original image —
+  the evidence behind every render
+end note
+oqcnote .. oqc
+
+[build_scene.py\ngeometry + looks -> Cycles .blend] as bscene #Pink
+note as bscenenote
+  automatically uses the best graphics
+  hardware available and degrades
+  gracefully — the same product runs
+  on a workstation or a render farm
+end note
+bscenenote .. bscene
+
+[export_glb.py (trimesh)\nGLB straight from geometry — NO Blender] as glbexp #Pink
+note as glbnote
+  the customer chain is Blender-free:
+  plain Python geometry + industry
+  compression produce the web+AR model.
+  Blender stays an operator tool —
+  nothing the customer receives
+  depends on it
+end note
+glbnote .. glbexp
+
+' dormant tier: no consumer yet, so no aggregate builds it (YAGNI)
+[nifti_to_vdb.py] as vdbconv #Pink
+database "work/context.vdb\nOpenVDB sparse fog" as vdb
+note as nebulanote
+  the next look in the catalog: render the
+  raw scan as a luminous nebula — no data
+  reduction, scientifically faithful, and
+  visually unlike anything competitors
+  ship. Activates as ~30 lines in
+  build_scene.py; until then this branch
+  is dormant — built on demand, shipped
+  by nothing.
+end note
+nebulanote .. vdb
+
+package "customer surface — the product" #Honeydew {
+  [<model-viewer> web+AR] as mv
+}
+
+package "operator surfaces — team tools, never leave the shop" #AliceBlue {
+  [operator review\nimage viewer / pager] as opq
+  [Blender GUI\nlive 3D demo rig] as bgui
+}
+note as opqnote
+  internal quality review: what the team
+  checks before anything reaches a
+  customer (QC overlay, hero still,
+  provenance sidecars — plain files,
+  any viewer works)
+end note
+opqnote .. opq
+
+pdf --> zip : manual portal step
+zip --> dcm : unzip
+dcm --> nii : dcm2niix
+
+nii --> c3dhead
+c3dhead --> headmask
+nii ==> tseg : AI tier enabled
+tseg ==> segmask : brain label\n(one of 50+ structures)
+
+nii --> frangi
+frangi --> vesnii
+vesnii --> tmask
+headmask --> tmask : dark mode
+segmask ==> tmask : preferred when present
+tmask --> maskcyl
+maskcyl --> lmesh
+lmesh --> plyv
+headmask --> smesh
+segmask ==> smesh
+smesh --> plyb
+maskcyl --> fthreads
+fthreads --> flowj
+maskcyl --> oqc
+nii --> oqc : background
+oqc --> overlay
+
+looks --> bscene
+looks --> glbexp
+plyv --> bscene
+plyb --> bscene : dark mode
+flowj --> bscene
+bscene --> blend
+blend --> rendercli
+rendercli --> png
+
+plyv --> glbexp
+plyb --> glbexp
+flowj --> glbexp
+glbexp --> glbfile
+glbfile --> gtx
+gtx --> optglb
+
+vesnii ..> vdbconv : on demand
+vdbconv ..> vdb
+vdb ..> bscene : nebula shader\n(pending consumer)
+
+blend --> bgui
+optglb --> mv
+overlay --> opq
+png --> opq : hero still reviewed\nbefore sharing
+
+patient --> zip : provides: downloads\ntheir scan once
+bgui --> patient : demo: the team shows\nthe organ live, in glass
+mv --> patient : sees: their organ in\nany browser or AR —\nTHE deliverable
+opq --> operator : reviews QC + hero still
+blend --> operator : opens the interactive\nscene when tuning
+
+' layout: customer loop pinned WEST of the pipeline spine, operator flow EAST
+patient -[hidden]right-> zip
+mv -[hidden]right-> tmask
+optglb -[hidden]right-> rendercli
+mv -[hidden]right-> bscene
+tmask -[hidden]right-> opq
+rendercli -[hidden]right-> blend
+bscene -[hidden]right-> operator
+@enduml

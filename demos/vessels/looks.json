@@ -1,0 +1,25 @@
+{
+  "Vessels": {
+    "tint": [0.60, 0.78, 1.00],
+    "ior": 1.50,
+    "absorption_per_mm": 0.28,
+    "roughness": 0.015
+  },
+  "Flow": {
+    "emission_color": [1.00, 0.52, 0.18],
+    "emission_strength": 160.0,
+    "width_mm": 1.1
+  },
+  "Brain": {
+    "tint": [0.82, 0.86, 0.94],
+    "ior": 1.35,
+    "absorption_per_mm": 0.003,
+    "roughness": 0.03
+  },
+  "Lights": {
+    "back_panel_w": 1.0,
+    "back_panel_color": [1.00, 0.82, 0.58],
+    "rim_w": 0.25,
+    "rim_color": [0.70, 0.82, 1.00]
+  }
+}

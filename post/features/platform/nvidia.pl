@@ -5,8 +5,29 @@
 opt_install(nvidia_driver, '/usr/bin/nvidia-smi', 'ubuntu-drivers install') :-
     has_nvidia.
 
-%% CUDA toolkit — only a fact when an NVIDIA GPU is present.
-binary_pkg('/usr/local/cuda/bin/nvcc', 'cuda-toolkit') :- has_nvidia.
+%% CUDA toolkit — only a fact when the GPU can actually RUN what it
+%% compiles: CUDA 13 dropped every architecture below compute capability
+%% 7.5, so has_nvidia alone is too coarse (XXIII) — the laptop's Maxwell
+%% GTX 980M (5.2) had 4.7G of toolkit + 2.4G of Nsight profilers it
+%% could never use (found in the 2026-08-14 disk sweep).
+cuda_supported :-
+    shell_ok("nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | awk -F. 'NR==1{exit !($1*10+$2>=75)}'").
+binary_pkg('/usr/local/cuda/bin/nvcc', 'cuda-toolkit') :- has_nvidia, cuda_supported.
+
+%% The inverse on unsupported GPUs: the dead toolkit is APT state, so
+%% apt removes it (never rm — dpkg must agree with disk). Verified
+%% apt -s 2026-08-14: 63 packages, all cuda-*/nsight-*/CUDA libs, zero
+%% driver packages. Check = no toolkit remnants installed.
+%% Purge only on POSITIVE evidence of an unsupported cap — never on
+%% \+ cuda_supported, which is also true when nvidia-smi is merely down
+%% (driver/kernel skew, a state this rig has been in): a dead sensor on
+%% a capable GPU must read "unknown", not "purge my toolkit".
+cuda_unsupported :-
+    shell_ok("nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | awk -F. 'NR==1&&NF==2{exit !($1*10+$2<75)} END{if(NR==0)exit 1}'").
+hardening_check(no_dead_cuda,
+    "! dpkg -l 'cuda-*' 'nsight-compute-*' 'nsight-systems-*' 2>/dev/null | grep -q '^ii'",
+    "apt-get purge -y 'cuda-*' 'nsight-compute-*' 'nsight-systems-*'") :-
+    has_nvidia, cuda_unsupported.
 
 %% NVIDIA's CUDA apt repo is added by installing the cuda-keyring deb, which
 %% ships both the signing key and the sources.list entry.

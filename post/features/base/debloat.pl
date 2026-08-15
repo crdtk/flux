@@ -49,6 +49,29 @@ hardening_check(turboquant_leftover_absent, Check, Fix) :-
     user_home(Home),
     format(atom(Check), "! test -e ~w/turboquant-demo", [Home]),
     format(atom(Fix), "rm -rf ~w/turboquant-demo", [Home]).
+%% 2026-08-10 incident repair: the first (purge-based) crash-reporting
+%% fix executed before being corrected to the mask, and 26.04's
+%% apport-gtk/-kde hard-deps cascaded the purge into the desktop stack
+%% (gdm3, gnome-shell, kwin-x11, plasma-session-x11, xorg, xserver-xorg,
+%% ubuntu-session, gnome-control-center). dpkg was interrupted mid-kill:
+%% binaries mostly survived but selections stayed "purge" — one future
+%% apt run would finish the job — and ubuntu-session's files are gone.
+%% Fix: mark everything install again, then reinstall the whole set.
+hardening_check(desktop_stack_intact,
+    "! dpkg --get-selections gnome-shell kwin-x11 plasma-session-x11 xserver-xorg xorg ubuntu-session gnome-control-center gdm3 python3-apport 2>/dev/null | grep -qE 'purge|deinstall' && test -e /usr/share/wayland-sessions/ubuntu.desktop && test -e /usr/share/xsessions/plasmax11.desktop",
+    "printf '%s install\\n' gnome-shell kwin-x11 plasma-session-x11 xserver-xorg xorg ubuntu-session gnome-control-center gdm3 gnome-shell-ubuntu-extensions python3-apport | dpkg --set-selections; apt-get install -y --reinstall gnome-shell kwin-x11 plasma-session-x11 xserver-xorg xorg ubuntu-session gnome-control-center gdm3").
+%% No crash daemon — final form of the 2026-08-10..12 campaign, decided
+%% with the dependency map fully lit: the apport DAEMON purges cleanly
+%% (verified apt -s: takes only whoopsie, nothing else — drkonqi stays,
+%% KDE untouched); what is WELDED is python3-apport, the inert library
+%% xserver-xorg hard-depends (purging THAT amputated the desktop —
+%% guarded in desktop_stack_intact above). No decoy packages: the lib
+%% stays installed and truthful. Check demands daemon+uploader gone,
+%% the pin present, and the load-bearing lib still installed; masks
+%% from the earlier neutering are lifted as now-pointless clutter.
+hardening_check(no_crash_daemon,
+    "! dpkg -s apport 2>/dev/null | grep -q 'ok installed' && ! dpkg -s whoopsie 2>/dev/null | grep -q 'ok installed' && test -f /etc/apt/preferences.d/no-crash-daemon && dpkg -s python3-apport 2>/dev/null | grep -q 'ok installed'",
+    "apt-get purge -y apport whoopsie && printf 'Package: apport\\nPin: release a=*\\nPin-Priority: -1\\n\\nPackage: whoopsie\\nPin: release a=*\\nPin-Priority: -1\\n' > /etc/apt/preferences.d/no-crash-daemon; systemctl unmask apport whoopsie 2>/dev/null || true; systemctl daemon-reload").
 hardening_check(pam_sss_absent,
     "! grep -rq pam_sss /etc/pam.d/ 2>/dev/null",
     "grep -rl pam_sss /etc/pam.d/ 2>/dev/null | xargs -r sed -i '/pam_sss/d'").
