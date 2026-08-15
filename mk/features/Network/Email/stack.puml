@@ -1,0 +1,97 @@
+@startuml stack
+' Mail stack — Thunderbird as the credential-holding proxy (2026-08-14).
+' The decision drawn as a picture: ONE program owns credentials, network
+' and every write; the CLI reads through file seams only. Pink is the
+' entire bespoke surface (one query catalog); everything else is
+' off-the-shelf. The Gloda cylinder is private Thunderbird internals
+' with an announced successor (Panorama) — the read path is built to be
+' deleted, which is why it is one pink box and not an architecture.
+title Mail stack — Thunderbird proxy: one writer, file seams for reading
+caption cylinder = working data, rebuilt on demand (gold = Thunderbird-owned, never written by us) · file = authored/irreplaceable truth · pink = our own code (the entire bespoke surface) · solid = runs today · dashed = next in the catalog, slots into the same interfaces
+
+skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+skinparam linetype ortho
+
+actor "user" as user
+cloud "Gmail\n(IMAP/SMTP + OAuth2)" as gmail
+
+file "git identity\nuser.name / user.email —\nONE identity source,\nread by provisioning and\nreply-audit alike" as gitid #Honeydew
+
+note as oauthnote
+  the ONLY manual step in the whole
+  stack: one OAuth consent click at
+  first connect. The account itself
+  is seeded from the git identity —
+  the setup wizard never runs.
+end note
+
+[Thunderbird\nofficial tarball — holds credentials,\nsyncs, sends, renders; the ONE writer] as tb
+oauthnote .. tb
+
+[BuxarTranslate\nGoogle Translate add-on] as buxar
+[Thunderbird Translate\nGemini add-on] as ttrans
+note as transnote
+  two DISSIMILAR cloud translators —
+  one service degrading doesn't take
+  both. Stated trade-off: selected
+  text reaches Google. Both retire
+  the day Thunderbird ships its
+  on-device engine (Bergamot, on
+  the official roadmap).
+end note
+transnote .. buxar
+
+database "profile user.js\nseeded prefs: account graph,\nindexer pin — read at startup,\nnever fought over with a\nlive Thunderbird" as userjs #Gold
+database "global-messages-db.sqlite\nGloda full-text index —\nprivate schema, dies with\nPanorama, priced in" as gloda #Gold
+
+[mail query catalog\nsearch / unanswered / ad-hoc SQL —\none pattern rule, questions as data] as catalog #Pink
+note as catnote
+  read-only at the CONNECTION level
+  (sqlite mode=ro) — "nothing but
+  Thunderbird writes" is a mechanism,
+  not a promise. The reply audit
+  answers "which lawyer threads
+  await my reply?" from the same
+  seam. The whole Gloda vocabulary
+  lives in this one deletable file.
+end note
+catnote .. catalog
+
+[terminal / agent\nanswers on stdout] as term
+
+' dormant tier: adopted the day a live verb is needed (YAGNI)
+[thunderbird-cli\nsigned extension bridge —\nsupported API, live freshness,\ndraft-gated sending] as bridge
+note as bridgenote
+  next in the catalog: the SUPPORTED
+  scripting surface. Slots in when a
+  question needs what files cannot
+  give — live state, full message
+  bodies, replying. The catalog
+  interface survives; only the
+  queries retarget.
+end note
+bridgenote .. bridge
+
+gitid --> tb : provisioning seeds the\naccount pref graph
+gmail <--> tb : OAuth once, then\nsync + send
+userjs --> tb : read at startup
+tb --> gloda : background indexer\n(only while running —\nautostart keeps it fresh)
+buxar --> tb : translate selection
+ttrans --> tb : translate message
+
+gloda --> catalog : read-only
+catalog --> term
+
+tb ..> bridge : pending consumer
+bridge ..> term : live verbs, when needed
+
+user --> tb : reads + writes mail —\nthe ONLY write surface
+term --> user : sees: search hits,\nopen-thread audit
+tb --> user : one OAuth click,\nonce
+
+' layout: cloud north, user east of the seams
+gmail -[hidden]down-> tb
+tb -[hidden]right-> user
+gloda -[hidden]right-> catalog
+@enduml

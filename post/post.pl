@@ -427,7 +427,11 @@ gen_package_rule :-
     append(RegPkgs, DebPaths, All),
     ( All \= []
     -> atomic_list_concat(['apt install -y' | All], ' ', InstallCmd),
-       append([package_lists_fresh | DebDeps], [], InstDeps),
+       %% an interrupted dpkg blocks every install: recovery precedes the batch
+       ( failed(hardening, dpkg_consistent, missing)
+       -> DpkgDeps = [hardening_applied(dpkg_consistent)]
+       ;  DpkgDeps = [] ),
+       append([package_lists_fresh | DebDeps], DpkgDeps, InstDeps),
        assert(build_rule(packages_installed, InstDeps, [InstallCmd])),
        append([internet_ok | RepoDeps], [], UpdateDeps),
        assert(build_rule(package_lists_fresh, UpdateDeps, ['apt-get update']))

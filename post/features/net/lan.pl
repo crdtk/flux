@@ -10,6 +10,10 @@ binary_pkg('/usr/lib/x86_64-linux-gnu/sane/libsane-airscan.so.1', 'sane-airscan'
 binary_pkg('/usr/bin/simple-scan', 'simple-scan').
 
 binary_pkg('/usr/bin/cockpit-bridge', 'cockpit cockpit-files').
+%% Storage page (udisks2-backed): the LVM/RAID/filesystem GUI — chosen
+%% 2026-08-14 over partitionmanager (Cockpit already serves here) and
+%% blivet-gui (not in the archive). Marker is the module manifest.
+binary_pkg('/usr/share/cockpit/storaged/manifest.json', 'cockpit-storaged').
 %% Both machines must accept SSH — the repo's origin is a peer clone
 %% (rig ⇄ laptop), and only the rig happened to ship sshd. The
 %% ssh_lan_password/sshd_answers rules below guard on this binary:

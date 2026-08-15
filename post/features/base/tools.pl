@@ -15,7 +15,31 @@ binary_pkg('/usr/bin/rclone',        rclone).
 binary_pkg('/usr/bin/xclip',         xclip).
 binary_pkg('/usr/bin/jq',            jq).
 binary_pkg('/usr/bin/convert',       imagemagick).
+binary_pkg('/usr/bin/plantuml',      plantuml).
+%% lightweight 3D viewer for the vessels demo GLB/PLY artifacts
+binary_pkg('/usr/bin/f3d',           f3d).
+%% npx runner for node CLI specialists (gltf-transform) — nothing global
+binary_pkg('/usr/bin/npm',           npm).
+
+%% Convert3D (ITK-SNAP's CLI): NIfTI mask morphology as one pipeline —
+%% the vessels demo's CLI specialist for Otsu/components/distance
+%% transforms. Not in the archive; static binary from the project's
+%% nightly channel (URL verified 2026-08-10, ~55MB).
+opt_install(c3d, '/opt/c3d/bin/c3d', Cmd) :-
+    downloads_dir(DDir),
+    format(atom(Cmd),
+        "curl -fsSL 'https://sourceforge.net/projects/c3d/files/c3d/Nightly/c3d-nightly-Linux-x86_64.tar.gz/download' -o ~w/c3d-nightly-Linux-x86_64.tar.gz && mkdir -p /opt/c3d && tar -xzf ~w/c3d-nightly-Linux-x86_64.tar.gz -C /opt/c3d --strip-components=1 && ln -sf /opt/c3d/bin/c3d /usr/local/bin/c3d",
+        [DDir, DDir]).
 binary_pkg('/usr/bin/bleachbit',     bleachbit).
+%% disk-usage pair, chosen 2026-08-14: filelight = the Plasma-native
+%% sunburst for the human; ncdu = the terminal specialist for sweeps
+%% (replaces hand-rolled du|sort pipelines). Baobab redundant on KDE.
+binary_pkg('/usr/bin/filelight',     filelight).
+binary_pkg('/usr/bin/ncdu',          ncdu).
+%% duplicate finder, chosen 2026-08-15: Czkawka (Rust, multithreaded)
+%% over dupeGuru (Python, ~10x slower) — exact dupes + perceptual
+%% image/video similarity; in the archive since 26.04.
+binary_pkg('/usr/bin/czkawka_gui',   'czkawka-gui').
 
 %% Blender comes from blender.org, not the archive: distro builds are
 %% compiled without the CUDA/OptiX Cycles kernels, so GPU rendering
@@ -30,6 +54,10 @@ opt_install(blender_official, '/opt/blender/blender', Cmd) :-
         [DDir, DDir]).
 binary_pkg('/usr/bin/kdenlive',      kdenlive).
 binary_pkg('/usr/bin/digikam',       digikam).
+%% digiKam 8's metadata engine shells out to ExifTool; without it every
+%% startup logs "ExifTool process cannot be started" and metadata
+%% read/write is dead (found 2026-08-15). Lives with digikam (XXV).
+binary_pkg('/usr/bin/exiftool',      'libimage-exiftool-perl').
 binary_pkg('/usr/bin/obs',           'obs-studio').
 binary_pkg('/usr/bin/xournalpp',     xournalpp).
 binary_pkg('/usr/bin/AusweisApp',    ausweisapp).

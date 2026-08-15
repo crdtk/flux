@@ -28,6 +28,29 @@ dm_installed(lightdm) :- shell_ok("test -x /usr/sbin/lightdm").
 %% assume it exists; this makes it restorable.
 binary_pkg('/usr/share/xsessions/plasmax11.desktop', 'plasma-session-x11').
 
+%% X must come up by itself: the selector's first viable DM is recorded in
+%% /etc/X11/default-display-manager (Debian DMs refuse to start when it
+%% names another or nothing — lost in the 2026-08-10 purge incident, which
+%% left graphical.target defaulted but no greeter willing to claim it),
+%% enabled, and running. `start`, never restart: a live session must not
+%% be bounced by a POST pass (start is a no-op while active).
+dm_binary(gdm, '/usr/sbin/gdm3').
+dm_binary(sddm, '/usr/bin/sddm').
+dm_binary(lightdm, '/usr/sbin/lightdm').
+dm_service(gdm, gdm3).
+dm_service(sddm, sddm).
+dm_service(lightdm, lightdm).
+hardening_check(display_manager_boots, Check, Fix) :-
+    select(display_manager, DM),
+    dm_binary(DM, Bin),
+    dm_service(DM, Svc),
+    format(atom(Check),
+        "grep -q ~w /etc/X11/default-display-manager 2>/dev/null && systemctl is-active --quiet ~w",
+        [Bin, Svc]),
+    format(atom(Fix),
+        "echo ~w > /etc/X11/default-display-manager && systemctl set-default graphical.target && systemctl enable ~w 2>/dev/null; systemctl start ~w",
+        [Bin, Svc, Svc]).
+
 %% active_display_manager(-DM) — which greeter actually launches sessions.
 %% /etc/X11/default-display-manager is authoritative on Debian/Ubuntu; if it
 %% names nothing recognizable, fall back to the selector's choice.
