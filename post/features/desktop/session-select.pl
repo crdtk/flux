@@ -5,34 +5,29 @@
 %% launch X11, Wayland AND Lomiri sessions); installed alternates are held
 %% standby-ready so switching is a greeter choice, not a repair.
 
-%% On an ASPEED-spine machine (the rig) SDDM outranks GDM: GDM's Wayland
-%% greeter goes dark on the BMC head (mutter picks the GPU KMS node; the
-%% iKVM sees nothing — fought 2026-08-16), while SDDM launches plain X on
-%% the spine fragment. Sensed hardware condition, not a hostname (XXVI.IV):
-%% the laptop has no ASPEED, so its GDM-first ranking is untouched.
-candidate(display_manager, sddm) :-
-    shell_ok("lspci 2>/dev/null | grep -iqE 'VGA.*ASPEED'").
-%% The DM split is also a package split: gdm3 is demanded only where it is
-%% the ranked DM (no ASPEED), and PURGED on the spine machine — an unused
-%% greeter there isn't idle, it actively steals the seat (GDM restarted
-%% twice on 2026-08-16, VT-switching SDDM's X away and blacking the iKVM;
-%% masking helps, absence is truthful). Purge is apt-owned (XXI); run
-%% `apt-get -s purge gdm3` on the rig first if the cascade is unproven.
-binary_pkg('/usr/sbin/gdm3', gdm3) :-
-    \+ shell_ok("lspci 2>/dev/null | grep -iqE 'VGA.*ASPEED'").
-hardening_check(no_gdm_on_spine,
+%% Unified 2026-08-16: SDDM everywhere, Lomiri over. GDM's only unique
+%% capability was launching Lomiri sessions; with that experiment closed
+%% the machines unify on the Plasma-native DM. On the rig this was forced
+%% first (GDM's Wayland greeter renders on the GPU head and VT-switches
+%% SDDM's X away, blacking the iKVM — fought 2026-08-16); the laptop
+%% followed by decision. GDM is purged wherever it is NOT the active
+%% greeter — the gate keeps POST from purging a DM mid-session (the
+%% 2026-08-10 scar): on a machine still seated on GDM the rule waits
+%% for the reboot that hands the seat to SDDM.
+candidate(display_manager, sddm).     % Plasma-native, unified primary
+candidate(display_manager, lightdm).  % X11-only standby (cannot launch Wayland sessions)
+hardening_check(no_gdm,
     "! dpkg -l gdm3 2>/dev/null | grep -q '^ii'",
     "apt-get purge -y gdm3") :-
-    shell_ok("lspci 2>/dev/null | grep -iqE 'VGA.*ASPEED'").
-candidate(display_manager, gdm).      % proven here: launches X11, Wayland AND Lomiri sessions
-candidate(display_manager, sddm).     % Plasma-native, plain INI config — first standby
-candidate(display_manager, lightdm).  % cannot launch Wayland sessions — last resort
+    \+ shell_ok("systemctl is-active --quiet gdm3 2>/dev/null || systemctl is-active --quiet gdm 2>/dev/null").
+advisory(hardening, gdm_seat_handoff,
+    'GDM still holds the seat — log out and reboot so SDDM takes over; no_gdm purges gdm3 on the next pass') :-
+    shell_ok("systemctl is-active --quiet gdm3 2>/dev/null || systemctl is-active --quiet gdm 2>/dev/null").
 candidate(session, plasmax11).        % global menu needs X11 (KWin Wayland lacks appmenu)
 candidate(session, plasmawayland).
-candidate(session, lomiri).           % experimental — demoted while crash evidence stands
 
 %% viable(+Domain, +Option) — live probes, not assumptions.
-%% (viable(session, lomiri) lives in desktop/lomiri.pl with its evidence.)
+%% (lomiri.pl deleted 2026-08-16 — experiment closed, module revoked whole.)
 viable(display_manager, DM) :- dm_installed(DM).
 viable(session, plasmax11) :-
     shell_ok("test -f /usr/share/xsessions/plasmax11.desktop").

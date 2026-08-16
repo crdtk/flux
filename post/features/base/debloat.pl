@@ -59,10 +59,29 @@ hardening_check(turboquant_leftover_absent, Check, Fix) :-
 %% Fix: mark everything install again, then reinstall the whole set.
 %% (gdm3 removed from this list 2026-08-16: which DM a machine runs is the
 %% session-select domain — the rig purges gdm3 deliberately, and this repair
-%% rule must not resurrect it. The laptop's gdm3 is demanded there instead.)
+%% rule must not resurrect it. The laptop's gdm3 is demanded there instead.
+%% Split the same day: the GNOME members are demanded only off-spine — the
+%% rig is Plasma-only (no_extra_desktops_on_spine below), and this repair
+%% rule must not resurrect GNOME there either. The core X+Plasma+apport-lib
+%% set stays machine-agnostic: that weld is universal.)
 hardening_check(desktop_stack_intact,
-    "! dpkg --get-selections gnome-shell kwin-x11 plasma-session-x11 xserver-xorg xorg ubuntu-session gnome-control-center python3-apport 2>/dev/null | grep -qE 'purge|deinstall' && test -e /usr/share/wayland-sessions/ubuntu.desktop && test -e /usr/share/xsessions/plasmax11.desktop",
-    "printf '%s install\\n' gnome-shell kwin-x11 plasma-session-x11 xserver-xorg xorg ubuntu-session gnome-control-center gnome-shell-ubuntu-extensions python3-apport | dpkg --set-selections; apt-get install -y --reinstall gnome-shell kwin-x11 plasma-session-x11 xserver-xorg xorg ubuntu-session gnome-control-center").
+    "! dpkg --get-selections kwin-x11 plasma-session-x11 xserver-xorg xorg python3-apport 2>/dev/null | grep -qE 'purge|deinstall' && test -e /usr/share/xsessions/plasmax11.desktop",
+    "printf '%s install\\n' kwin-x11 plasma-session-x11 xserver-xorg xorg python3-apport | dpkg --set-selections; apt-get install -y --reinstall kwin-x11 plasma-session-x11 xserver-xorg xorg").
+%% Plasma-only, BOTH machines (unified 2026-08-16, Lomiri over): every
+%% extra desktop is another session the greeter can mis-remember
+%% (xfce-wayland black-screened the iKVM) and another stack that can
+%% claim the seat. Purge verified apt -s on rig AND laptop 2026-08-16:
+%% identical six packages, GNOME family + gdm3 only — no plasma-*,
+%% kwin-*, xserver-xorg, or python3-apport in the cascade. Gated on
+%% GNOME not being the live session (never purge the seat's own desktop
+%% mid-session — the 2026-08-10 scar); on a machine still seated on
+%% GNOME it waits for the SDDM handoff reboot.
+hardening_check(no_extra_desktops,
+    "! dpkg -l gnome-shell ubuntu-session gnome-control-center gnome-shell-ubuntu-extensions 2>/dev/null | grep -q '^ii'",
+    "apt-get purge -y gnome-shell ubuntu-session gnome-control-center gnome-shell-ubuntu-extensions") :-
+    \+ shell_ok("pgrep -x gnome-shell >/dev/null 2>&1"),
+    %% the cascade takes gdm3 with it — never while GDM holds the seat
+    \+ shell_ok("systemctl is-active --quiet gdm3 2>/dev/null || systemctl is-active --quiet gdm 2>/dev/null").
 %% No crash daemon — final form of the 2026-08-10..12 campaign, decided
 %% with the dependency map fully lit: the apport DAEMON purges cleanly
 %% (verified apt -s: takes only whoopsie, nothing else — drkonqi stays,
