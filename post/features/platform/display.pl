@@ -35,8 +35,8 @@ display_channel(gpu_dp, 'nvidia-drm', offload,
 %% provider when its driver is up. Gated on ASPEED presence; BusID sensed.
 config_patch(xorg_bmc_primary, '/usr/lib/xorg/Xorg', Check, Fix) :-
     shell_ok("lspci 2>/dev/null | grep -iqE 'VGA.*ASPEED'"),
-    Check = "grep -q AllowNVIDIAGPUScreens /etc/X11/xorg.conf.d/10-bmc-primary.conf 2>/dev/null && grep -q AutoAddGPU /etc/X11/xorg.conf.d/10-bmc-primary.conf && ! test -f /etc/X11/xorg.conf.d/10-aspeed-vga.conf",
-    Fix = "rm -f /etc/X11/xorg.conf.d/10-aspeed-vga.conf; b=$(lspci -Dnn | grep -iE 'VGA.*ASPEED' | head -1 | cut -d' ' -f1); s=${b#*:}; bus=${s%%:*}; r=${s#*:}; dev=${r%%.*}; fn=${r#*.}; id=$(printf 'PCI:%d:%d:%d' \"0x$bus\" \"0x$dev\" \"0x$fn\"); mkdir -p /etc/X11/xorg.conf.d; { printf '%s\\n' 'Section \"ServerLayout\"' '    Identifier \"layout\"' '    Option \"AllowNVIDIAGPUScreens\"' 'EndSection' 'Section \"ServerFlags\"' '    Option \"AutoAddGPU\" \"false\"' 'EndSection' 'Section \"Device\"' '    Identifier \"BMC\"' '    Driver \"modesetting\"'; printf '    BusID \"%s\"\\n' \"$id\"; printf '%s\\n' 'EndSection' 'Section \"Screen\"' '    Identifier \"Screen0\"' '    Device \"BMC\"' 'EndSection'; } > /etc/X11/xorg.conf.d/10-bmc-primary.conf".
+    Check = "grep -q AllowNVIDIAGPUScreens /etc/X11/xorg.conf.d/10-bmc-primary.conf 2>/dev/null && grep -q AutoAddGPU /etc/X11/xorg.conf.d/10-bmc-primary.conf && grep -q SWcursor /etc/X11/xorg.conf.d/10-bmc-primary.conf && ! test -f /etc/X11/xorg.conf.d/10-aspeed-vga.conf",
+    Fix = "rm -f /etc/X11/xorg.conf.d/10-aspeed-vga.conf; b=$(lspci -Dnn | grep -iE 'VGA.*ASPEED' | head -1 | cut -d' ' -f1); s=${b#*:}; bus=${s%%:*}; r=${s#*:}; dev=${r%%.*}; fn=${r#*.}; id=$(printf 'PCI:%d:%d:%d' \"0x$bus\" \"0x$dev\" \"0x$fn\"); mkdir -p /etc/X11/xorg.conf.d; { printf '%s\\n' 'Section \"ServerLayout\"' '    Identifier \"layout\"' '    Option \"AllowNVIDIAGPUScreens\"' 'EndSection' 'Section \"ServerFlags\"' '    Option \"AutoAddGPU\" \"false\"' 'EndSection' 'Section \"Device\"' '    Identifier \"BMC\"' '    Driver \"modesetting\"' '    Option \"SWcursor\" \"true\"'; printf '    BusID \"%s\"\\n' \"$id\"; printf '%s\\n' 'EndSection' 'Section \"Screen\"' '    Identifier \"Screen0\"' '    Device \"BMC\"' 'EndSection'; } > /etc/X11/xorg.conf.d/10-bmc-primary.conf".
 
 %% Offload provider: the A4000 as a PRIME GPU screen. Gated on GPU PRESENCE
 %% (lspci), not driver liveness — with AllowNVIDIAGPUScreens a failed nvidia load
@@ -55,14 +55,15 @@ config_patch(xorg_monolith_retired, '/etc/X11/xorg.conf', Check, Fix) :-
 
 %% Spine resolution: the iKVM mirrors whatever mode the ASPEED head runs, and
 %% with no monitor attached there is no EDID, so X falls back to 640x480 — the
-%% remote console becomes a postage stamp. Pin 1920x1080@60 via a Modeline in a
-%% per-channel fragment (AST2500 ceiling is 1920x1200). Connector name VGA-1 is
-%% the ast driver's stable name for the BMC head. Applicable only where the
+%% remote console becomes a postage stamp. Pin 1280x1024 — a NATIVE ast mode
+%% (xrandr on the rig lists up to 1920x1200 without any modeline; custom
+%% modelines are unnecessary risk), and the sweet spot for iKVM streaming.
+%% Connector name VGA-1 is stable for the BMC head. Applicable only where
 %% ASPEED graphics exist; delete the fragment to fall back to auto-modes.
 config_patch(xorg_bmc_mode, '/usr/lib/xorg/Xorg', Check, Fix) :-
     shell_ok("lspci 2>/dev/null | grep -iqE 'VGA.*ASPEED'"),
-    Check = "grep -q 1920x1080_60 /etc/X11/xorg.conf.d/20-bmc-mode.conf 2>/dev/null && grep -q Monitor-VGA-1 /etc/X11/xorg.conf.d/10-bmc-primary.conf 2>/dev/null",
-    Fix = "mkdir -p /etc/X11/xorg.conf.d && printf '%s\\n' 'Section \"Monitor\"' '    Identifier \"BMCVGA\"' '    Modeline \"1920x1080_60\" 173.00 1920 2048 2248 2576 1080 1083 1088 1120 -hsync +vsync' '    Option \"PreferredMode\" \"1920x1080_60\"' 'EndSection' > /etc/X11/xorg.conf.d/20-bmc-mode.conf && grep -q Monitor-VGA-1 /etc/X11/xorg.conf.d/10-bmc-primary.conf || sed -i '/Driver \"modesetting\"/a\\    Option \"Monitor-VGA-1\" \"BMCVGA\"' /etc/X11/xorg.conf.d/10-bmc-primary.conf".
+    Check = "grep -q 1280x1024 /etc/X11/xorg.conf.d/20-bmc-mode.conf 2>/dev/null && grep -q Monitor-VGA-1 /etc/X11/xorg.conf.d/10-bmc-primary.conf 2>/dev/null",
+    Fix = "mkdir -p /etc/X11/xorg.conf.d && printf '%s\\n' 'Section \"Monitor\"' '    Identifier \"BMCVGA\"' '    Option \"PreferredMode\" \"1280x1024\"' 'EndSection' > /etc/X11/xorg.conf.d/20-bmc-mode.conf && { grep -q Monitor-VGA-1 /etc/X11/xorg.conf.d/10-bmc-primary.conf || sed -i '/Driver \"modesetting\"/a\\    Option \"Monitor-VGA-1\" \"BMCVGA\"' /etc/X11/xorg.conf.d/10-bmc-primary.conf; }".
 
 %% prime-run: the render-offload wrapper (user phase). GPU work opts in explicitly
 %% — `prime-run glxgears`, `prime-run blender` — so the default desktop stays on

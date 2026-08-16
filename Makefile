@@ -282,7 +282,7 @@ sync: sync-push sync-pull
 # its password prompt; expect the rig's sudo to ask once.
 .PHONY: rig-post
 rig-post:
-	ssh -t crucible.local 'cd ~/Desktop/Projects/flux && make | sudo bash && make | bash'
+	ssh -t crucible.local 'cd ~/Desktop/Projects/flux && git pull servalws.local:Desktop/Projects/flux main && make | sudo bash < /dev/null && make | bash < /dev/null'
 
 # Which Cycles render devices the installed Blender actually sees —
 # OPTIX rows prove the official build's GPU kernels are live (the
