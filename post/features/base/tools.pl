@@ -40,6 +40,9 @@ binary_pkg('/usr/bin/ncdu',          ncdu).
 %% over dupeGuru (Python, ~10x slower) — exact dupes + perceptual
 %% image/video similarity; in the archive since 26.04.
 binary_pkg('/usr/bin/czkawka_gui',   'czkawka-gui').
+%% same engine headless — drives `make dup-report` (Filesystem/user.mk)
+%% without the GUI's large-result-set freeze.
+binary_pkg('/usr/bin/czkawka_cli',   'czkawka-cli').
 
 %% Blender comes from blender.org, not the archive: distro builds are
 %% compiled without the CUDA/OptiX Cycles kernels, so GPU rendering
@@ -62,6 +65,7 @@ binary_pkg('/usr/bin/obs',           'obs-studio').
 binary_pkg('/usr/bin/xournalpp',     xournalpp).
 binary_pkg('/usr/bin/AusweisApp',    ausweisapp).
 binary_pkg('/usr/bin/vlc',           vlc).
+binary_pkg('/usr/bin/kdeconnect-app', kdeconnect).
 binary_pkg('/usr/bin/git',           git).
 
 %% Git edits (commit messages, rebase todos) open in vi — system tier

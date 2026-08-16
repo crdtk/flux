@@ -57,9 +57,12 @@ hardening_check(turboquant_leftover_absent, Check, Fix) :-
 %% binaries mostly survived but selections stayed "purge" — one future
 %% apt run would finish the job — and ubuntu-session's files are gone.
 %% Fix: mark everything install again, then reinstall the whole set.
+%% (gdm3 removed from this list 2026-08-16: which DM a machine runs is the
+%% session-select domain — the rig purges gdm3 deliberately, and this repair
+%% rule must not resurrect it. The laptop's gdm3 is demanded there instead.)
 hardening_check(desktop_stack_intact,
-    "! dpkg --get-selections gnome-shell kwin-x11 plasma-session-x11 xserver-xorg xorg ubuntu-session gnome-control-center gdm3 python3-apport 2>/dev/null | grep -qE 'purge|deinstall' && test -e /usr/share/wayland-sessions/ubuntu.desktop && test -e /usr/share/xsessions/plasmax11.desktop",
-    "printf '%s install\\n' gnome-shell kwin-x11 plasma-session-x11 xserver-xorg xorg ubuntu-session gnome-control-center gdm3 gnome-shell-ubuntu-extensions python3-apport | dpkg --set-selections; apt-get install -y --reinstall gnome-shell kwin-x11 plasma-session-x11 xserver-xorg xorg ubuntu-session gnome-control-center gdm3").
+    "! dpkg --get-selections gnome-shell kwin-x11 plasma-session-x11 xserver-xorg xorg ubuntu-session gnome-control-center python3-apport 2>/dev/null | grep -qE 'purge|deinstall' && test -e /usr/share/wayland-sessions/ubuntu.desktop && test -e /usr/share/xsessions/plasmax11.desktop",
+    "printf '%s install\\n' gnome-shell kwin-x11 plasma-session-x11 xserver-xorg xorg ubuntu-session gnome-control-center gnome-shell-ubuntu-extensions python3-apport | dpkg --set-selections; apt-get install -y --reinstall gnome-shell kwin-x11 plasma-session-x11 xserver-xorg xorg ubuntu-session gnome-control-center").
 %% No crash daemon — final form of the 2026-08-10..12 campaign, decided
 %% with the dependency map fully lit: the apport DAEMON purges cleanly
 %% (verified apt -s: takes only whoopsie, nothing else — drkonqi stays,
