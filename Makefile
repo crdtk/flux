@@ -282,7 +282,11 @@ sync: sync-push sync-pull
 # its password prompt; expect the rig's sudo to ask once.
 .PHONY: rig-post
 rig-post:
-	ssh -t crucible.local 'cd ~/Desktop/Projects/flux && git pull servalws.local:Desktop/Projects/flux main && make | sudo bash < /dev/null && make | bash < /dev/null'
+# NEVER `| bash < /dev/null` — the redirect overrides the pipe and bash
+# executes NOTHING (a whole afternoon of silent no-op "applies",
+# 2026-08-16). Interactivity is solved in the plan itself: emit_plan's
+# preamble exports DEBIAN_FRONTEND=noninteractive.
+	ssh -t crucible.local 'cd ~/Desktop/Projects/flux && git pull servalws.local:Desktop/Projects/flux main && make | sudo bash && make | bash'
 
 # Which Cycles render devices the installed Blender actually sees —
 # OPTIX rows prove the official build's GPU kernels are live (the

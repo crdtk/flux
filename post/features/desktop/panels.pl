@@ -12,7 +12,8 @@
 %% removing them is destructive and stays in make reset-panels.
 %%
 %% Top: kppleMenu | title widget | GLOBAL MENU (appmenu) | spacer |
-%% weather (DWD Berlin-Alexanderplatz) | tray | Flex Hub | clock. The JS is
+%% net speed | tray | clock | kup | clipboard | kscreen | cpu | kdeconnect |
+%% net | notifications | print | battery | weather (DWD) | brightness. The JS is
 %% single-quote-free by construction — the gdbus call wraps it in single
 %% quotes. Bottom: auto-hide dock (kickoff + dashboard + icontasks).
 %% Weather placeInfo format is place_name|station_id (ion_dwd.cpp): the name
@@ -31,8 +32,11 @@ binary_pkg('/usr/libexec/vala-panel/appmenu-registrar',
 %% KDE Store widgets — repo and package subdir, keyed by plugin id.
 kde_widget('com.github.antroids.application-title-bar',
            'https://github.com/antroids/application-title-bar', package).
-kde_widget('Plasma.Flex.Hub',
-           'https://github.com/zayronxio/Plasma.Flex.Hub', '.').
+%% (Plasma.Flex.Hub dropped 2026-08-16: its QML broke on Plasma 6.6 —
+%% NightLightControl is a private API it borrowed. Every feature it
+%% bundled is stock: volume/brightness/media/network live in the tray
+%% extraItems, net speed is a systemmonitor widget. No store widget may
+%% hold a CONTROL function; store widgets are cosmetic-only here.)
 kde_widget('com.github.chrtall.kppleMenu',
            'https://github.com/ChrTall/kppleMenu', package).
 user_config(widget(Id), Check, Fix) :-
@@ -62,18 +66,16 @@ top_panel_js(JS) :-
         't.writeConfig("windowTitleUndefined", "Plasma");',
         'p.addWidget("org.kde.plasma.appmenu");',
         'p.addWidget("org.kde.plasma.panelspacer");',
-        'var w = p.addWidget("org.kde.plasma.weather");',
-        'w.currentConfigGroup = ["WeatherStation"];',
-        'w.writeConfig("provider", "dwd");',
-        'w.writeConfig("placeInfo", "Berlin-Alex.|10389");',
-        'w.writeConfig("placeDisplayName", "Berlin-Alex.");',
-        'w.currentConfigGroup = ["Appearance"];',
-        'w.writeConfig("showTemperatureInCompactMode", true);',
+        'var n = p.addWidget("org.kde.plasma.systemmonitor");',
+        'n.currentConfigGroup = ["Appearance"];',
+        'n.writeConfig("chartFace", "org.kde.ksysguard.textonly");',
+        'n.writeConfig("title", "Net");',
+        'n.currentConfigGroup = ["Sensors"];',
+        'n.writeConfig("highPrioritySensorIds", ["network/all/download", "network/all/upload"]);',
         'var s = p.addWidget("org.kde.plasma.systemtray");',
         's.currentConfigGroup = ["General"];',
-        's.writeConfig("extraItems", "");',
+        's.writeConfig("extraItems", ["org.kde.plasma.volume", "org.kde.plasma.brightness", "org.kde.plasma.mediacontroller", "org.kde.plasma.networkmanagement"]);',
         's.writeConfig("knownItems", ["org.kde.plasma.weather"]);',
-        'p.addWidget("Plasma.Flex.Hub");',
         'var c = p.addWidget("org.kde.plasma.digitalclock");',
         'c.currentConfigGroup = ["Appearance"];',
         'c.writeConfig("dateDisplayFormat", "BesideTime");',
@@ -82,6 +84,25 @@ top_panel_js(JS) :-
         'c.writeConfig("fontSize", 14);',
         'c.writeConfig("dateFormat", "custom");',
         'c.writeConfig("customDateFormat", "dd.MM.yy |");',
+        %% right wing, hand-arranged 2026-08-16 and adopted verbatim:
+        %% status/utility singles the tray popup would hide a click away
+        'p.addWidget("org.kde.kupapplet");',
+        'p.addWidget("org.kde.plasma.clipboard");',
+        'p.addWidget("org.kde.kscreen");',
+        'p.addWidget("org.kde.plasma.systemmonitor.cpucore");',
+        'p.addWidget("org.kde.kdeconnect");',
+        'p.addWidget("org.kde.plasma.systemmonitor.net");',
+        'p.addWidget("org.kde.plasma.notifications");',
+        'p.addWidget("org.kde.plasma.printmanager");',
+        'p.addWidget("org.kde.plasma.battery");',
+        'var w2 = p.addWidget("org.kde.plasma.weather");',
+        'w2.currentConfigGroup = ["WeatherStation"];',
+        'w2.writeConfig("provider", "dwd");',
+        'w2.writeConfig("placeInfo", "Berlin-Alex.|10389");',
+        'w2.writeConfig("placeDisplayName", "Berlin-Alex.");',
+        'w2.currentConfigGroup = ["Appearance"];',
+        'w2.writeConfig("showTemperatureInCompactMode", true);',
+        'p.addWidget("org.kde.plasma.brightness");',
         '}',
         'var have = panels().filter(function(q) { return q.location == "top"; }).map(function(q) { return q.screen; });',
         'for (var i = 0; i < screenCount; i++) { if (have.indexOf(i) < 0) { mkTop(i); } }'
@@ -173,7 +194,6 @@ user_config(kscreen_autostart, Check, Fix) :-
 
 user_config_deps(top_panel,
     [user_config_applied(widget('com.github.antroids.application-title-bar')),
-     user_config_applied(widget('Plasma.Flex.Hub')),
      user_config_applied(widget('com.github.chrtall.kppleMenu')),
      user_config_applied(plasmashell_active),
      packages_installed]).
