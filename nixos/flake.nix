@@ -23,7 +23,16 @@
         modules = [ ./installer.nix { _module.args.flakeSelf = self; } ];
       };
 
-      packages.${system}.iso =
-        self.nixosConfigurations.installer.config.system.build.isoImage;
+      # Live-desktop clone of the provisioned environment (reproduced
+      # from POST's catalog via packages.nix, never copied).
+      nixosConfigurations.live = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [ ./live.nix ];
+      };
+
+      packages.${system} = {
+        iso = self.nixosConfigurations.installer.config.system.build.isoImage;
+        live-iso = self.nixosConfigurations.live.config.system.build.isoImage;
+      };
     };
 }

@@ -23,3 +23,17 @@ nixos-usb: nixos-iso
 	@echo ">>> writing $$(ls $(NIXOS_ISO_LINK)/iso/*.iso) to $(DEV) in 5s (ctrl-c to abort)"; sleep 5
 	sudo dd if=$$(ls $(NIXOS_ISO_LINK)/iso/*.iso) of=$(DEV) bs=4M conv=fsync status=progress
 	@echo ">>> done — boot the laptop from it and run: sudo serval-nixos-install"
+
+# packages.nix is GENERATED: POST's binary_pkg facts are the single
+# catalog; deb2nix.pl maps deb names to nixpkgs attrs (skips = services
+# and apt plumbing; unmapped facts surface as TODO comments — the
+# mechanically-discovered migration gap list).
+nixos/packages.nix: nixos/deb2nix.pl $(wildcard post/features/*/*.pl) post/post.pl
+	swipl -q -g export_nix -t halt nixos/deb2nix.pl >/dev/null
+
+## Build the live-desktop ISO — the provisioned environment, reproduced on a stick.
+.PHONY: nixos-live-iso
+nixos-live-iso: nixos/packages.nix
+	@command -v nix >/dev/null || { echo ">>> nix missing — run the POST first (make | sudo bash)"; exit 1; }
+	cd nixos && $(NIX) build .#live-iso -o result-live
+	@ls -lh nixos/result-live/iso/*.iso
