@@ -14,7 +14,13 @@ binary_pkg('/usr/bin/plank',         plank).
 binary_pkg('/usr/bin/rclone',        rclone).
 binary_pkg('/usr/bin/xclip',         xclip).
 binary_pkg('/usr/bin/jq',            jq).
-binary_pkg('/usr/bin/convert',       imagemagick).
+%% imagemagick: retired 2026-08-17 (no-consumer rule). Added 2026-08-10
+%% as a render-critique session tool for the vessels look-dev loop;
+%% nothing checked in ever invoked convert/montage/magick, and the user
+%% doesn't use it by hand. apt -s verified: one package, no cascade.
+hardening_check(no_imagemagick,
+    "! dpkg -l imagemagick 2>/dev/null | grep -q '^ii'",
+    "apt-get purge -y imagemagick").
 binary_pkg('/usr/bin/plantuml',      plantuml).
 %% lightweight 3D viewer for the vessels demo GLB/PLY artifacts
 binary_pkg('/usr/bin/f3d',           f3d).
