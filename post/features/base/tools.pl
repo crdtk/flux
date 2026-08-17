@@ -97,3 +97,23 @@ config_patch(heif_mime_types,
     '/usr/lib/x86_64-linux-gnu/qt5/plugins/imageformats/kimg_heif.so',
     "! test -f /usr/share/kservices5/imagethumbnail.desktop || grep -q 'image/heif' /usr/share/kservices5/imagethumbnail.desktop 2>/dev/null",
     "sed -i 's|image/avif;|image/avif;image/heif;image/heic;|' /usr/share/kservices5/imagethumbnail.desktop 2>/dev/null || true").
+
+%% ── Nix (NixOS-alongside ISO builds, mk/features/System/NixOS) ──────────────
+%% nix-bin alone ships no daemon; nix-setup-systemd carries the units. The
+%% daemon socket is 0660 root:nix-users — the human user must be in the
+%% group (takes effect at next login). `make nixos-iso` builds the
+%% self-installing USB from nixos/flake.nix on top of this.
+binary_pkg('/usr/bin/nix', 'nix-bin').
+binary_pkg('/usr/lib/systemd/system/nix-daemon.service', 'nix-setup-systemd').
+
+service_check(nix_daemon,
+    "systemctl is-enabled nix-daemon.socket >/dev/null 2>&1",
+    "systemctl enable --now nix-daemon.socket").
+
+hardening_check(nix_users_group, Check, Fix) :-
+    run_as_user(U),
+    format(atom(Check), "id -nG ~w | grep -qw nix-users", [U]),
+    format(atom(Fix),   "usermod -aG nix-users ~w", [U]).
+
+%% Sends the WoL magic packet from the laptop (make rig-wake).
+binary_pkg('/usr/bin/wakeonlan', wakeonlan).

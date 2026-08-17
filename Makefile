@@ -253,12 +253,70 @@ SYNC_PATH  = $(if $(SYNC_DIR),$(SYNC_DIR),.)
 # --no-owner --no-group: ownership is per-machine identity; non-root
 # rsync cannot chgrp what the user does not own (a root-owned leftover
 # under $HOME failed the first pull with error 23).
-SYNC      := rsync -auh --no-owner --no-group --info=progress2 \
+SYNC_EXCLUDES := \
              --exclude=flux --exclude=Crucible \
              --exclude=LLMs-from-scratch --exclude=secrets \
              --exclude=bert-size-reco --exclude=gehaltsabrechnung \
              --exclude=.ssh --exclude=.gnupg --exclude=.claude \
              --exclude=.config/syncthing --exclude=.cache
+SYNC      := rsync -auh --no-owner --no-group --info=progress2 $(SYNC_EXCLUDES)
+
+# Out-of-band rig power via the always-on BMC (ASRock Rack, .23; the OS
+# rides .24). The password is TPM-sealed on this laptop (make bmc-enroll):
+# ciphertext at rest in /etc/credstore.encrypted, decryptable only by
+# this machine's TPM, plaintext existing nowhere — not in history, ps
+# (-E reads $IPMI_PASSWORD from the environment), files, or transcripts.
+# Env IPMI_PASSWORD still works as the no-TPM fallback.
+BMC_HOST ?= 192.168.178.23
+BMC_USER ?= admin
+BMC_CRED := /etc/credstore.encrypted/crucible-bmc.cred
+IPMI      = ipmitool -I lanplus -H $(BMC_HOST) -U $(BMC_USER) -E
+# Decrypt needs root (TPM access) — hence sudo on the credential path.
+IPMI_RUN  = if test -f $(BMC_CRED); then \
+	      IPMI_PASSWORD=$$(sudo systemd-creds decrypt $(BMC_CRED) -) $(IPMI) $(1); \
+	    elif test -n "$$IPMI_PASSWORD"; then $(IPMI) $(1); \
+	    else echo ">>> no TPM credential ($(BMC_CRED)) and no IPMI_PASSWORD in env — run: make bmc-enroll"; exit 1; fi
+
+## One-time: seal the BMC password to this laptop's TPM (typed silently, stored as ciphertext).
+.PHONY: bmc-enroll
+bmc-enroll:
+	@sudo mkdir -p /etc/credstore.encrypted
+	@printf 'BMC password for %s (input hidden): ' $(BMC_HOST); \
+	  IFS= read -rs pw; echo; \
+	  printf '%s' "$$pw" | sudo systemd-creds encrypt --name=crucible-bmc - $(BMC_CRED)
+	@sudo systemd-creds decrypt $(BMC_CRED) - >/dev/null && echo ">>> sealed and decrypt-verified: $(BMC_CRED)"
+
+## Power on the rig via BMC (TPM credential, or IPMI_PASSWORD env fallback).
+.PHONY: rig-on
+rig-on:
+	@$(call IPMI_RUN,power status)
+	@$(call IPMI_RUN,power on)
+
+## Rig power state via BMC.
+.PHONY: rig-status
+rig-status:
+	@$(call IPMI_RUN,power status)
+
+# Wake-on-LAN: password-free power-on. Needs the rig-side POST rule
+# (wol_magic_packet) to have armed the NIC, plus one BIOS setting
+# (see rig-wake fence message). RIG_MAC is the OS NIC, not the BMC's
+# 9c:6b:00:47:28:34 — sensed from the Fritz!Box device table 2026-08-17
+# (.24 = :19 is the ssh port; its twin .25 = :1a is the second X550 port).
+RIG_MAC ?= 9c:6b:00:48:57:19
+
+## Sense the rig's wired MAC over ssh (rig must be up) and print the line to persist.
+.PHONY: rig-mac
+rig-mac:
+	@mac=$$(ssh crucible.local "ip -o link show \$$(ip -o route get 1.1.1.1 | sed 's/.* dev \\([^ ]*\\).*/\\1/')" | grep -o 'ether [0-9a-f:]*' | cut -d' ' -f2); \
+	test -n "$$mac" && echo ">>> paste into Makefile: RIG_MAC ?= $$mac" || { echo ">>> could not sense — is the rig up?"; exit 1; }
+
+## Power on the rig with a WoL magic packet (no password): make rig-wake
+.PHONY: rig-wake
+rig-wake:
+	@test -n "$(RIG_MAC)" || { echo ">>> RIG_MAC unset — run 'make rig-mac' while the rig is up, then persist it here."; \
+	  echo ">>> also check BIOS once: Advanced > ACPI/Chipset > 'PCIE Devices Power On' = Enabled"; exit 1; }
+	wakeonlan $(RIG_MAC)
+	@echo ">>> magic packet sent to $(RIG_MAC) — sshd on .24 in ~90s if BIOS+NIC are armed"
 
 .PHONY: sync-push
 sync-push:
@@ -267,6 +325,28 @@ sync-push:
 .PHONY: sync-pull
 sync-pull:
 	$(SYNC) crucible.local:$(SYNC_PATH)/ $(USER_HOME)/$(SYNC_PATH)/
+
+# Read-only proof that every local file exists BYTE-IDENTICAL on the rig:
+# -n never writes, -c reads and checksums both sides (slow = honest —
+# mtime/size alone can lie after tool-driven moves). Per-machine digiKam
+# DBs are excluded (deliberately .stignore'd, never expected remotely).
+# Report lines: `<f+++++++++` = missing on crucible, `<fc...` = content
+# differs; an empty report is the pass.
+SYNC_VERIFY_REPORT := /tmp/sync-verify.txt
+
+## Checksum-verify local files against crucible (no writes): make sync-verify SYNC_DIR=Pictures
+.PHONY: sync-verify
+sync-verify:
+	rsync -rnc --itemize-changes --out-format='%i %n' \
+	  $(SYNC_EXCLUDES) \
+	  --exclude='digikam4*.db' --exclude='recognition*.db' \
+	  --exclude='similarity*.db' --exclude='thumbnails-digikam*.db' \
+	  --exclude='.sync*' --exclude='*.sync-conflict-*' \
+	  $(USER_HOME)/$(SYNC_PATH)/ crucible.local:$(SYNC_PATH)/ \
+	  | grep -v '^\.d\|^cd' | tee $(SYNC_VERIFY_REPORT); \
+	if test -s $(SYNC_VERIFY_REPORT); then \
+	  echo ">>> $$(wc -l < $(SYNC_VERIFY_REPORT)) file(s) missing or different on crucible — $(SYNC_VERIFY_REPORT)"; \
+	else echo ">>> PASS: every local file under $(SYNC_PATH) is byte-identical on crucible"; fi
 
 # Both directions in one go, at HOME level, skipping hidden entries at
 # the home root (anchored /.* — dotfiles deeper down, like a project's

@@ -1,11 +1,11 @@
 %% desktop/mail — Thunderbird as the credential-holding mail proxy.
 %% Decision (2026-08-14): mail credentials/OAuth/sync live in Thunderbird
-%% alone; the CLI reads mail through its Gloda full-text index
-%% (global-messages-db.sqlite, opened READ-ONLY — consumer: `make
-%% mail-search`, the one file allowed to know the Gloda schema; the
-%% schema is private and dies with the Panorama rewrite, so the whole
-%% read path must stay disposable). Nothing outside Thunderbird ever
-%% writes mail state. Deleting this module revokes the proxy decision.
+%% alone. The CLI read path is thunderbird-cli (`tb`) over the bridge
+%% below — live mailbox queries through Thunderbird's own extension API,
+%% no private schema. (The Gloda SQL catalog was deleted 2026-08-17 by
+%% the no-consumer rule; git history keeps it.) Nothing outside
+%% Thunderbird ever writes mail state. Deleting this module revokes the
+%% proxy decision.
 
 %% The archive's `thunderbird` (2:1snap1) is a snap-transitional shell —
 %% uninstallable here (snapd purged+pinned, debloat.pl) and a decoy by
@@ -25,14 +25,21 @@ opt_install(thunderbird_official, '/opt/thunderbird/thunderbird', Cmd) :-
 %% start; the filename MUST be the GUID or the channel ignores it),
 %% guarded on the /opt binary so rules wait for the tarball install.
 %%
-%% Both translators send text to Google's servers — a stated trade-off
+%% Translators send text to external servers — a stated trade-off
 %% accepted 2026-08-14 (on-device Bergamot is on Thunderbird's roadmap,
 %% unshipped; delete these facts when it lands). Two DISSIMILAR backends
-%% (Translate vs Gemini) so one service degrading doesn't take both.
-%% thunderbird-translate's Gemini API key is pasted in the add-on's own
+%% (Google Translate vs DeepL) so one service degrading doesn't take
+%% both. 2026-08-17: thunderbird-translate (Gemini) replaced — Google
+%% retired gemini-2.5-flash and v1.1 hardcodes it (404 on every call);
+%% DeepL free API (500k chars/month) is the better engine for German
+%% mail anyway. The DeepL API key is pasted in the add-on's own
 %% settings — human-only (XXIV), never a POST artifact.
-tb_addon(buxar_translate,       buxartranslate,          'buxarnet@yandex.com').
-tb_addon(thunderbird_translate, 'thunderbird-translate', 'thunderbird-translate@sully-vian').
+tb_addon(buxar_translate,      buxartranslate,          'buxarnet@yandex.com').
+tb_addon(quicktranslate_deepl, 'quicktranslate-deepl',  'quicktranslate-deepl@jurdant.alexis').
+%% Dead Gemini add-on: remove the stale system-wide XPI wherever present.
+hardening_check(no_gemini_translate,
+    "! test -e '/opt/thunderbird/distribution/extensions/thunderbird-translate@sully-vian.xpi'",
+    "rm -f '/opt/thunderbird/distribution/extensions/thunderbird-translate@sully-vian.xpi'").
 
 config_patch(Name, '/opt/thunderbird/thunderbird', Check, Fix) :-
     tb_addon(Name, Slug, Guid),
@@ -75,10 +82,11 @@ user_config(mail_account_seed, Check, Fix) :-
         "EMAIL=$(git config --get user.email) && NAME=$(git config --get user.name) && ls -d ~w/.thunderbird/*/ >/dev/null 2>&1 || thunderbird --headless -CreateProfile default >/dev/null 2>&1; for d in ~w/.thunderbird/*/; do test -f \"$d/prefs.js\" && grep -qs 'mail.accountmanager.accounts' \"$d/prefs.js\" && continue; grep -qs \"useremail\\\", \\\"$EMAIL\" \"$d/user.js\" || printf 'user_pref(\"mail.accountmanager.accounts\", \"account1\");\\nuser_pref(\"mail.accountmanager.defaultaccount\", \"account1\");\\nuser_pref(\"mail.account.account1.server\", \"server1\");\\nuser_pref(\"mail.account.account1.identities\", \"id1\");\\nuser_pref(\"mail.identity.id1.fullName\", \"%s\");\\nuser_pref(\"mail.identity.id1.useremail\", \"%s\");\\nuser_pref(\"mail.identity.id1.smtpServer\", \"smtp1\");\\nuser_pref(\"mail.server.server1.type\", \"imap\");\\nuser_pref(\"mail.server.server1.name\", \"%s\");\\nuser_pref(\"mail.server.server1.hostname\", \"imap.googlemail.com\");\\nuser_pref(\"mail.server.server1.port\", 993);\\nuser_pref(\"mail.server.server1.socketType\", 3);\\nuser_pref(\"mail.server.server1.userName\", \"%s\");\\nuser_pref(\"mail.server.server1.authMethod\", 10);\\nuser_pref(\"mail.smtpservers\", \"smtp1\");\\nuser_pref(\"mail.smtpserver.smtp1.hostname\", \"smtp.googlemail.com\");\\nuser_pref(\"mail.smtpserver.smtp1.port\", 587);\\nuser_pref(\"mail.smtpserver.smtp1.try_ssl\", 2);\\nuser_pref(\"mail.smtpserver.smtp1.authMethod\", 10);\\nuser_pref(\"mail.smtpserver.smtp1.username\", \"%s\");\\n' \"$NAME\" \"$EMAIL\" \"$EMAIL\" \"$EMAIL\" \"$EMAIL\" >> \"$d/user.js\"; done",
         [Home, Home]).
 
-%% Thunderbird starts with the session (XDG autostart): Gloda indexes
-%% only while the app runs, so a login-started Thunderbird is what keeps
-%% `make mail-search` current instead of minutes-to-days stale. Content
-%% probe on the Exec line, not mere file existence (XXI).
+%% Thunderbird starts with the session (XDG autostart): the tb bridge
+%% extension only lives while the app runs — a login-started Thunderbird
+%% is what makes `tb` queries answerable at all (and keeps Gloda, TB's
+%% own search index, current). Content probe on the Exec line, not mere
+%% file existence (XXI).
 user_config(thunderbird_autostart, Check, Fix) :-
     user_home(Home),
     format(atom(Check),
@@ -89,9 +97,49 @@ user_config(thunderbird_autostart, Check, Fix) :-
         [Home, Home]).
 
 %% Account setup is OAuth-in-browser — human-only (XXIV): WARN and name
-%% the step; never emit it as a command. Until the first sync completes,
-%% no Gloda db exists and mail-search has nothing to read.
-advisory(user_config, gloda_index, 'no Gloda index yet — launch thunderbird once, add the account (OAuth in-app), let it sync; then `make mail-search Q=...`') :-
+%% the step; never emit it as a command. Until the first sync completes
+%% there is no mailbox for tb (or TB's own search) to answer from.
+advisory(user_config, mail_first_sync, 'no synced mailbox yet — launch thunderbird once, add the account (OAuth in-app), let it sync; then `tb search ...`') :-
     user_home(Home),
     format(atom(Probe), "ls ~w/.thunderbird/*/global-messages-db.sqlite >/dev/null 2>&1", [Home]),
     \+ shell_ok(Probe).
+
+%% thunderbird-cli + bridge — live email queries over Thunderbird's
+%% mailboxes. Requires: (1) two npm packages, (2) a signed XPI extension
+%% in Thunderbird, (3) a persistent bridge daemon (tb-bridge). The bridge
+%% is the IPC path between the CLI and Thunderbird's mailbox API.
+opt_install(thunderbird_cli, '/usr/local/bin/tb', Cmd) :-
+    Cmd = "npm install -g thunderbird-cli thunderbird-cli-bridge".
+
+%% Bridge extension — signed by vitalio-sh, system-wide distribution.
+%% Same pattern as tb_addon: downloaded to /opt/thunderbird/distribution/extensions
+%% and auto-installs into every profile on next Thunderbird start.
+config_patch(thunderbird_bridge_ext, '/opt/thunderbird/thunderbird', Check, Fix) :-
+    Check = "test -s '/opt/thunderbird/distribution/extensions/thunderbird-ai@extension.xpi'",
+    Fix   = "mkdir -p /opt/thunderbird/distribution/extensions && rm -f '/opt/thunderbird/distribution/extensions/thunderbird-ai-bridge@vitalio-sh.xpi' && curl -fsSL 'https://github.com/vitalio-sh/thunderbird-cli/releases/download/v1.0.2/thunderbird_ai_bridge-2.0.0-tb.xpi' -o '/opt/thunderbird/distribution/extensions/thunderbird-ai@extension.xpi'".
+
+%% Install the bridge extension into every profile (backup to distribution
+%% folder — ensures it's present even if the system-wide discovery fails).
+user_config(thunderbird_bridge_in_profile, Check, Fix) :-
+    user_home(Home),
+    format(atom(Check),
+        "for d in ~w/.thunderbird/*/extensions/; do test -f \"${d}thunderbird-ai@extension.xpi\" && exit 0; done; exit 1",
+        [Home]),
+    format(atom(Fix),
+        "for d in ~w/.thunderbird/*/extensions/; do test -d \"$d\" && cp /opt/thunderbird/distribution/extensions/thunderbird-ai@extension.xpi \"$d\"; done",
+        [Home]).
+
+%% The bridge daemon as a supervised systemd user service: the extension
+%% (a WebExtension — cannot spawn processes) dials 127.0.0.1:7701 with
+%% retries, so "start with the extension" reduces to "the socket is
+%% always there in the session". Restart=on-failure survives bridge
+%% crashes; logs land in the user journal (journalctl --user -u
+%% tb-bridge). Replaces the earlier unsupervised XDG-autostart entry.
+user_config(thunderbird_bridge_daemon, Check, Fix) :-
+    user_home(Home),
+    format(atom(Check),
+        "grep -qs 'ExecStart=/usr/local/bin/tb-bridge' ~w/.config/systemd/user/tb-bridge.service && systemctl --user is-enabled --quiet tb-bridge 2>/dev/null",
+        [Home]),
+    format(atom(Fix),
+        "rm -f ~w/.config/autostart/thunderbird-bridge.desktop; mkdir -p ~w/.config/systemd/user && printf '[Unit]\\nDescription=thunderbird-cli bridge (tb <-> Thunderbird IPC)\\nPartOf=graphical-session.target\\n\\n[Service]\\nExecStart=/usr/local/bin/tb-bridge\\nRestart=on-failure\\nRestartSec=3\\n\\n[Install]\\nWantedBy=graphical-session.target\\n' > ~w/.config/systemd/user/tb-bridge.service && systemctl --user daemon-reload && systemctl --user enable --now tb-bridge",
+        [Home, Home, Home]).

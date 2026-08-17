@@ -1,44 +1,39 @@
-# Network/Email — CLI queries over the mail Thunderbird proxies (POST:
-# desktop/mail.pl owns install + Gloda pin). This file is the ONLY place
-# the Gloda schema may appear: the index is private Thunderbird internals
-# with an announced successor (Panorama), so the read path is built to be
-# thrown away — a query catalog, one file, read-only. Truth stays in
-# Gmail via Thunderbird; nothing here writes.
+# Network/Email — CLI mail access goes through thunderbird-cli (`tb`),
+# which queries the LIVE mailboxes over the bridge daemon (POST:
+# desktop/mail.pl owns the whole chain — npm packages, bridge XPI,
+# tb-bridge user service). Ad-hoc questions are tb one-liners, not make
+# targets:
 #
-# One pattern rule, queries as data (VI) — a question is a catalog line:
+#   tb search "words" --limit 20            full-text over live mail
+#   tb search "" --since 2026-08-17         by date window
+#   tb read <id> / tb --help                bodies; all 38 commands
 #
-#   make mail-search Q="invoice zalando" [N=20]   FTS MATCH over
-#     subject/body/author/recipients/attachmentNames (words, "phrases",
-#     OR, column:term). Hits, not full messages; freshness lags Gloda's
-#     background indexer by minutes.
-#   make mail-unanswered FROM=arbeitsrecht-berlin.de [N=20]   threads
-#     with mail from FROM and no later message of mine (fromMe) — the
-#     open-items audit. Blind to replies sent from other mailboxes.
+# The Gloda SQL catalog that lived here (mail-search / mail-unanswered /
+# mail-sql over global-messages-db.sqlite) was deleted 2026-08-17 by the
+# no-consumer rule: tb answers the same questions against fresher data
+# without the private-schema liability (Gloda's schema dies with
+# Panorama) and without the lock that barred queries exactly when
+# Thunderbird was running. Git history keeps the SQL if archaeology
+# ever needs it.
 
-# Newest profile's index wins if several exist (III — sensed at parse time).
-GLODA := $(lastword $(sort $(wildcard $(USER_HOME)/.thunderbird/*/global-messages-db.sqlite)))
-
-# Gloda schema notes: queries read messagesText_content — the FTS3
-# shadow table (docid = messages.id; c0body c1subject c2attachmentNames
-# c3author c4recipients) — because the virtual table itself demands
-# Mozilla's mozporter tokenizer, which stock sqlite3 cannot load (MATCH
-# is unpreparable; LIKE over the shadow is a full scan, milliseconds at
-# mailbox scale). date is PRTime (µs since epoch); deleted rows linger
-# until Gloda compacts them.
-GLODA_QUERY_search = SELECT datetime(m.date/1000000,'unixepoch') AS date, t.c3author AS author, f.folderURI AS folder, t.c1subject AS subject FROM messagesText_content t JOIN messages m ON m.id = t.docid LEFT JOIN folderLocations f ON f.id = m.folderID WHERE (t.c1subject LIKE '%$(or $(Q),$(error mail-search: needs Q="words"))%' OR t.c0body LIKE '%$(Q)%' OR t.c3author LIKE '%$(Q)%' OR t.c4recipients LIKE '%$(Q)%') AND m.deleted = 0 ORDER BY m.date DESC LIMIT $(or $(N),20)
-# "Answered by me" = a later message in the thread authored by my git
-# identity (messages has no fromMe column; authorship is the truth the
-# index actually holds — and Sent Mail is indexed, proven 2026-08-14).
-ME := $(shell git config --get user.email)
-GLODA_QUERY_unanswered = SELECT datetime(MAX(m.date)/1000000,'unixepoch') AS waiting_since, t.c3author AS author, t.c1subject AS subject FROM messagesText_content t JOIN messages m ON m.id = t.docid WHERE t.c3author LIKE '%$(or $(FROM),$(error mail-unanswered: needs FROM=domain-or-address))%' AND m.deleted = 0 GROUP BY m.conversationID HAVING COALESCE((SELECT MAX(r.date) FROM messages r JOIN messagesText_content rt ON rt.docid = r.id WHERE r.conversationID = m.conversationID AND rt.c3author LIKE '%$(ME)%'), 0) < MAX(m.date) ORDER BY 1 LIMIT $(or $(N),20)
-# Ad-hoc escape hatch — a question without a catalog edit; still bound
-# by the same read-only connection: make mail-sql SQL='SELECT ...'
-GLODA_QUERY_sql = $(or $(SQL),$(error mail-sql: needs SQL='SELECT ...'))
+# The one recurring audit stays encoded (XVII): latest traffic from a
+# correspondent, newest first — the human scans for "did I answer the
+# last one?". True thread-level unanswered detection needs conversation
+# joins tb doesn't expose yet; this target claims only what it does.
+# Two extension limits, both verified live 2026-08-17: the query string
+# is PLAIN full-text (`from:`/`created:` operator syntax hangs the
+# handler until timeout), and result sets much past ~10 do the same —
+# limit 10 answers in seconds, 25+ wedges the extension until a
+# Thunderbird restart clears it. So: small limit, authorship filter in
+# jq, N capped at 10.
+## Latest mail from a correspondent via live query: make mail-from FROM=arbeitsrecht-berlin.de [N<=10]
+.PHONY: mail-from
+mail-from:
+	@test -n "$(FROM)" || { echo ">>> usage: make mail-from FROM=domain-or-address [N<=10]"; exit 1; }
+	@tb search "$(FROM)" --limit 10 | \
+	  jq -r '.data.messages[] | select(.author | test("$(FROM)")) | [.date[:16], .author, .subject, .folder.name] | @tsv' | \
+	  sort -r | head -$(or $(N),10) | column -t -s'	'
 
 # Architecture spec (same idiom as demos/vessels/docs/stack.puml).
 mk/features/Network/Email/stack.png: mk/features/Network/Email/stack.puml
 	plantuml -tpng $<
-
-mail-%:
-	$(if $(GLODA_QUERY_$*),,$(error unknown query '$*' — known: $(patsubst GLODA_QUERY_%,%,$(filter GLODA_QUERY_%,$(.VARIABLES)))))
-	@$(if $(GLODA),sqlite3 -box -cmd '.timeout 15000' "file:$(GLODA)?mode=ro" "$(GLODA_QUERY_$*)",echo ">>> no Gloda index — POST advisory gloda_index names the human step")

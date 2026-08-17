@@ -67,3 +67,36 @@ disk-clean:
 	-uv cache clean
 	-flatpak uninstall -y de.bund.ausweisapp.ausweisapp2; flatpak uninstall --unused -y
 	@df -h / | tail -1
+
+# Chronological photo filing — the 2026-08-16 laptop sweep (4433 files),
+# encoded so crucible runs the identical procedure. Two passes, both
+# NON-recursive (only loose files at the Pictures root move; the YYYY/MM
+# tree is never re-touched): EXIF date first (DateTimeOriginal wins over
+# CreateDate — it names capture, not file creation), then a filename-date
+# fallback for EXIF-less media (WhatsApp IMG-YYYYMMDD-*, screenshots,
+# YYYYMMDD_HHMMSS.mp4). mv -n: a name collision leaves the file loose
+# and reported rather than overwriting. Leftovers print at the end —
+# an empty list is the pass. digiKam needs a rescan afterwards.
+PICS_DIR := $(USER_HOME)/Pictures
+PICS_EXT := -ext jpg -ext jpeg -ext png -ext heic -ext heif -ext gif \
+  -ext webp -ext bmp -ext tif -ext tiff -ext dng \
+  -ext mp4 -ext mov -ext avi -ext 3gp -ext mts -ext m4v -ext webm
+
+## File loose media at ~/Pictures root into YYYY/MM (EXIF date, filename fallback).
+.PHONY: pics-organize
+pics-organize:
+	@command -v exiftool >/dev/null || { echo ">>> exiftool missing — run the POST first"; exit 1; }
+# exiftool exits nonzero for files it cannot date; those are exactly what
+# the fallback pass is for — continue, never mask the messages.
+	-exiftool $(PICS_EXT) '-Directory<CreateDate' '-Directory<DateTimeOriginal' \
+	  -d '$(PICS_DIR)/%Y/%m' $(PICS_DIR)
+	@cd $(PICS_DIR) && for f in *.*; do \
+	  test -f "$$f" || continue; \
+	  d=$$(echo "$$f" | grep -oE '20[0-9]{6}' | head -1); test -n "$$d" || continue; \
+	  y=$$(echo "$$d" | cut -c1-4); m=$$(echo "$$d" | cut -c5-6); \
+	  test "$$m" -ge 01 -a "$$m" -le 12 2>/dev/null || continue; \
+	  mkdir -p "$$y/$$m" && mv -n -- "$$f" "$$y/$$m/" && echo "filed $$f -> $$y/$$m/"; \
+	done
+	@echo ">>> media leftovers at $(PICS_DIR) root (no date found — file by hand):"
+# only media counts as a leftover — digiKam's DBs live at the root by design
+	@cd $(PICS_DIR) && ls -p | grep -iE '\.(jpe?g|png|hei[cf]|gif|webp|bmp|tiff?|dng|mp4|mov|avi|3gp|mts|m4v|webm)$$' || echo "(none)"

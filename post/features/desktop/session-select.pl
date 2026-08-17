@@ -54,16 +54,29 @@ dm_binary(lightdm, '/usr/sbin/lightdm').
 dm_service(gdm, gdm3).
 dm_service(sddm, sddm).
 dm_service(lightdm, lightdm).
+%% SEAT GATE (2026-08-17 scar): `start` is a no-op only for the SAME
+%% service — starting the ranked DM while a DIFFERENT one holds the live
+%% seat steals the VT and terminates the running session (it killed the
+%% laptop's Plasma-under-GDM session mid-`make | sudo bash`). So the fix
+%% records + enables unconditionally (inert until boot) but starts only
+%% when no rival DM is active; and a pending handoff COUNTS as converged
+%% — the reboot is the human step the gdm_seat_handoff advisory names,
+%% not a failure to nag every run.
+other_dm_active_shell(Svc, Shell) :-
+    findall(S, (dm_service(_, S), S \= Svc), Others),
+    atomic_list_concat(Others, ' || systemctl is-active --quiet ', Inner),
+    format(atom(Shell), "systemctl is-active --quiet ~w", [Inner]).
 hardening_check(display_manager_boots, Check, Fix) :-
     select(display_manager, DM),
     dm_binary(DM, Bin),
     dm_service(DM, Svc),
+    other_dm_active_shell(Svc, Rival),
     format(atom(Check),
-        "grep -q ~w /etc/X11/default-display-manager 2>/dev/null && systemctl is-active --quiet ~w",
-        [Bin, Svc]),
+        "grep -q ~w /etc/X11/default-display-manager 2>/dev/null && systemctl is-enabled --quiet ~w 2>/dev/null && { systemctl is-active --quiet ~w || ~w; }",
+        [Bin, Svc, Svc, Rival]),
     format(atom(Fix),
-        "echo ~w > /etc/X11/default-display-manager && systemctl set-default graphical.target && systemctl enable ~w 2>/dev/null; systemctl start ~w",
-        [Bin, Svc, Svc]).
+        "echo ~w > /etc/X11/default-display-manager && systemctl set-default graphical.target && systemctl enable ~w 2>/dev/null; if ~w; then echo '>>> DM handoff deferred: a rival display manager holds the live seat - reboot to switch'; else systemctl start ~w; fi",
+        [Bin, Svc, Rival, Svc]).
 
 %% active_display_manager(-DM) — which greeter actually launches sessions.
 %% /etc/X11/default-display-manager is authoritative on Debian/Ubuntu; if it
@@ -141,3 +154,19 @@ user_config(xsessionrc, Check, Fix) :-
     format(atom(Fix),
         "printf '%s\\n' 'systemctl --user import-environment DISPLAY XAUTHORITY 2>/dev/null || true' > ~w/.xsessionrc",
         [Home]).
+
+%% After the seat lands with the ranked DM, a rival gdm3 unit can linger
+%% active, respawning a greeter that fights for the VT and — worse —
+%% gate-blocking its own purge forever (seen 2026-08-17: gdm3 + sddm both
+%% active after the collision). Stop it, but only when provably safe:
+%% the ranked DM is active AND no user-class session is served by GDM
+%% (a greeter session is GDM's own furniture, killable; a user session
+%% never is — the 2026-08-10 scar).
+hardening_check(no_rival_gdm_unit, Check, Fix) :-
+    select(display_manager, DM),
+    DM \= gdm,
+    dm_service(DM, Svc),
+    Check = "! systemctl is-active --quiet gdm3 && ! systemctl is-active --quiet gdm",
+    format(atom(Fix),
+        "if systemctl is-active --quiet ~w && ! ( for s in $(loginctl list-sessions --no-legend | awk '{print $1}'); do loginctl show-session $s -p Class | grep -q Class=user && loginctl show-session $s -p Service | grep -q gdm && exit 0; done; exit 1 ); then systemctl stop gdm3 2>/dev/null; systemctl stop gdm 2>/dev/null; true; else echo '>>> rival gdm stop deferred: it still serves a user session - reboot instead'; fi",
+        [Svc]).

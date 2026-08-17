@@ -1,23 +1,20 @@
 %% dev/toolchain — compilers, interpreters, package managers and local
 %% inference runtime: cmake, g++, SWI-Prolog (POST's own interpreter),
-%% gh, npm, uv, LM-Studio, gemini CLI.
+%% gh, npm, uv, gemini CLI.
 
 binary_pkg('/usr/bin/cmake',         cmake).
 binary_pkg('/usr/bin/g++-14',        'g++-14').
 binary_pkg('/usr/bin/swipl',         'swi-prolog-core').
 binary_pkg('/usr/bin/gh',            gh).
 binary_pkg('/usr/bin/npm',           npm).
-binary_pkg('/opt/LM-Studio/lm-studio', 'lm-studio').
-
-%% deb_install(+SentinelPath): installed from a local .deb, not a plain apt package.
-deb_install('/opt/LM-Studio/lm-studio').
-deb_source('/opt/LM-Studio/lm-studio',
-    'https://installers.lmstudio.ai/linux/x64/0.4.7-4/LM-Studio-0.4.7-4-x64.deb',
-    'LM-Studio-0.4.7-4-x64.deb').
-%% Applied only after a fresh install (sentinel was missing before this run).
-desktop_fix('/opt/LM-Studio/lm-studio',
-    '/usr/share/applications/lm-studio.desktop',
-    's|Exec=/opt/LM-Studio/lm-studio|Exec=/opt/LM-Studio/lm-studio --use-gl=desktop|').
+%% LM Studio: retired 2026-08-17 (user decision 2026-08-15 "unused" —
+%% inference lives on the rig via vLLM, its state dir was already swept
+%% by lmstudio-clean). Install facts deleted; the purge below unwinds
+%% the deb. Gate: never while the app is running.
+hardening_check(no_lmstudio,
+    "! dpkg -l lm-studio 2>/dev/null | grep -q '^ii'",
+    "apt-get purge -y lm-studio") :-
+    \+ shell_ok("pgrep -f /opt/LM-Studio >/dev/null 2>&1").
 
 user_tool(uv,     '.local/bin/uv',     'curl -LsSf https://astral.sh/uv/install.sh | sh').
 user_tool(gemini, '.local/bin/gemini', 'npm install --prefix ~/.local -g @google/gemini-cli').
