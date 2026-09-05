@@ -1,6 +1,6 @@
 %% net/tailscale — mesh VPN replacing DynDNS/port-forwarding; the crucible
 %% host is reached over the tailnet (see net/ssh-identity for the client
-%% side). Login is env-gated: no TS_AUTHKEY, no fix — only the advisory.
+%% side). First login is env-gated: TS_AUTHKEY="tskey-…" make | sudo bash.
 
 binary_pkg('/usr/bin/tailscale', tailscale).
 
@@ -14,19 +14,25 @@ apt_repo(tailscale_repo,
 
 pkg_repo(tailscale, tailscale_repo).
 
-%% Tailscale login handled by systemd service (tailscale-login.service).
-%% Auth key prompt moved to base/tools.pl to run early, before other setup.
-%% Boot-time service reads /etc/tailscale/authkey and authenticates once.
-%% Auth state persists in /var/lib/tailscale/ across reboots.
+%% Login is a one-time act: `tailscale up --authkey` stores the node key in
+%% /var/lib/tailscale/ and tailscaled (the package's own unit) reconnects
+%% from that state on every boot. No login service of ours is needed — a
+%% bare `tailscale up` on boot would in fact FAIL once --accept-routes/
+%% --accept-dns are set (it demands the flags be repeated or --reset).
+%% The auth key is staged by base/tools.pl (0_tailscale_authkey, from
+%% TS_AUTHKEY) and consumed here. --ssh runs Tailscale's SSH server so
+%% `tailscale ssh <host>` reaches this node without touching sshd.
 
 hardening_check(tailscale_login_now,
     "tailscale status 2>/dev/null | grep -q '^100\\.'",
-    "mkdir -p /var/lib/tailscale && tailscale up --authkey=\"$(cat /etc/tailscale/authkey)\" --accept-routes --accept-dns").
+    "tailscale up --authkey=\"$(cat /etc/tailscale/authkey)\" --ssh --accept-routes --accept-dns").
 
-hardening_check(tailscale_login_service,
-    "test -f /etc/systemd/system/tailscale-login.service",
-    "cat > /etc/systemd/system/tailscale-login.service << 'EOF'\n[Unit]\nDescription=Tailscale auto-reconnect on boot\nAfter=tailscale.service\nWants=tailscale.service\n\n[Service]\nType=oneshot\nExecStart=/usr/bin/tailscale up\nRemainAfterExit=yes\nUser=root\n\n[Install]\nWantedBy=multi-user.target\nEOF\nsystemctl daemon-reload && systemctl enable tailscale-login.service").
+hardening_check(tailscale_ssh_server,
+    "tailscale debug prefs 2>/dev/null | grep -q '\"RunSSH\": *true'",
+    "tailscale set --ssh").
 
-hardening_check(tailscale_login_script,
-    "test -f /usr/local/bin/tailscale-login && grep -q 'tailscale up' /usr/local/bin/tailscale-login",
-    "cat > /usr/local/bin/tailscale-login << 'EOF'\n#!/usr/bin/env bash\nset -e\nif ! tailscale status 2>/dev/null | grep -q '^100\\.'; then\n  AUTHKEY=$(cat /etc/tailscale/authkey 2>/dev/null) || { echo 'ERROR: /etc/tailscale/authkey not found'; exit 1; }\n  tailscale up --authkey=\"$AUTHKEY\" --accept-routes --accept-dns\nfi\nEOF\nchmod 755 /usr/local/bin/tailscale-login").
+%% Inverse of the 2026-09-05 login service (spent design, see above):
+%% remove it wherever an earlier pass installed it.
+hardening_check(no_tailscale_login_service,
+    "! test -e /etc/systemd/system/tailscale-login.service && ! test -e /usr/local/bin/tailscale-login",
+    "systemctl disable --now tailscale-login.service 2>/dev/null; rm -f /etc/systemd/system/tailscale-login.service /usr/local/bin/tailscale-login; systemctl daemon-reload").

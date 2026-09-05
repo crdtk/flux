@@ -21,8 +21,18 @@ user_config(ssh_config_crucible, Check, Fix) :-
     format(atom(Check),
         "grep -q '^Host crucible$' ~w/.ssh/config 2>/dev/null", [Home]),
     format(atom(Fix),
-        "printf '%s\\n' 'Host crucible' '    HostName crucible.dns.army' '    AddressFamily inet' '    User m' '    IdentityFile ~w/.ssh/id_ed25519' '    ServerAliveInterval 60' >> ~w/.ssh/config && chmod 600 ~w/.ssh/config",
+        "printf '%s\\n' 'Host crucible' '    AddressFamily inet' '    User m' '    IdentityFile ~w/.ssh/id_ed25519' '    ServerAliveInterval 60' >> ~w/.ssh/config && chmod 600 ~w/.ssh/config",
         [Home, Home, Home]).
+%% No HostName: `crucible` resolves over the tailnet via MagicDNS
+%% (--accept-dns, net/tailscale). The former HostName crucible.dns.army
+%% is a dead DynDNS name (dns.army gone 2026-08); this drift rule strips
+%% it from configs an earlier pass wrote, else `ssh crucible` hangs on it.
+user_config(ssh_config_crucible_no_dnsarmy, Check, Fix) :-
+    user_home(Home),
+    format(atom(Check),
+        "! grep -q 'crucible\\.dns\\.army' ~w/.ssh/config 2>/dev/null", [Home]),
+    format(atom(Fix),
+        "sed -i '/HostName crucible\\.dns\\.army/d' ~w/.ssh/config", [Home]).
 %% The mDNS spelling is a separate Host block: ssh only applies User/options
 %% when the TYPED name matches a Host pattern, so `ssh crucible.local` sailed
 %% past the `Host crucible` block and fell back to the client's local username.
