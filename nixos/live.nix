@@ -8,10 +8,18 @@
   # Stateless by design: data lives on the rig/Syncthing, not the stick.
   imports = [
     "${modulesPath}/installer/cd-dvd/installation-cd-minimal.nix"
+    ./serval-install-script.nix
     ./packages.nix
   ];
 
+  # vscode (Microsoft's build — parity with Ubuntu's `code`) is unfree;
+  # nixpkgs refuses it without this explicit opt-in.
+  nixpkgs.config.allowUnfree = true;
+
   isoImage.volumeID = "SERVAL_LIVE";
+  # xz took 50+ min on 8 threads for this closure; zstd builds in minutes
+  # for a modestly larger image — rebuild-speed wins for a rehearsal ISO.
+  isoImage.squashfsCompression = "zstd -Xcompression-level 6";
   networking.hostName = "serval-live";
   time.timeZone = "Europe/Berlin";
 
@@ -33,5 +41,9 @@
 
   # Not in the binary_pkg catalog (they are opt_installs on Ubuntu, snap
   # politics) but part of the environment; plain packages here.
-  environment.systemPackages = with pkgs; [ thunderbird firefox ];
+  # claude-code: the rescue stick's killer feature — ask why the machine
+  # won't boot, from the stick that boots. Auth note: the live system is
+  # stateless, so `claude` needs its OAuth login once per boot (or copy
+  # ~/.claude/.credentials.json from a synced machine into the session).
+  environment.systemPackages = with pkgs; [ thunderbird firefox claude-code ];
 }

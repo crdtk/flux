@@ -27,7 +27,7 @@
       # from POST's catalog via packages.nix, never copied).
       nixosConfigurations.live = nixpkgs.lib.nixosSystem {
         inherit system;
-        modules = [ ./live.nix ];
+        modules = [ ./live.nix { _module.args.flakeSelf = self; } ];
       };
 
       packages.${system} = {

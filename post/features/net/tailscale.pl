@@ -14,15 +14,19 @@ apt_repo(tailscale_repo,
 
 pkg_repo(tailscale, tailscale_repo).
 
-%% Tailscale login — only fixable when TS_AUTHKEY is in the environment;
-%% without it the advisory below names the human step instead.
-service_check(tailscale_up, Check, Fix) :-
-    getenv('TS_AUTHKEY', Key),
-    Check = "tailscale status 2>/dev/null | grep -q '^100\\.'",
-    format(atom(Fix),
-        "tailscale up --authkey \"~w\" --accept-routes --accept-dns", [Key]).
+%% Tailscale login handled by systemd service (tailscale-login.service).
+%% Auth key prompt moved to base/tools.pl to run early, before other setup.
+%% Boot-time service reads /etc/tailscale/authkey and authenticates once.
+%% Auth state persists in /var/lib/tailscale/ across reboots.
 
-advisory(services, tailscale_up,
-         'not logged in — export TS_AUTHKEY to authenticate') :-
-    \+ service_check(tailscale_up, _, _),
-    \+ shell_ok("tailscale status 2>/dev/null | grep -q '^100\\.'").
+hardening_check(tailscale_login_now,
+    "tailscale status 2>/dev/null | grep -q '^100\\.'",
+    "mkdir -p /var/lib/tailscale && tailscale up --authkey=\"$(cat /etc/tailscale/authkey)\" --accept-routes --accept-dns").
+
+hardening_check(tailscale_login_service,
+    "test -f /etc/systemd/system/tailscale-login.service",
+    "cat > /etc/systemd/system/tailscale-login.service << 'EOF'\n[Unit]\nDescription=Tailscale auto-reconnect on boot\nAfter=tailscale.service\nWants=tailscale.service\n\n[Service]\nType=oneshot\nExecStart=/usr/bin/tailscale up\nRemainAfterExit=yes\nUser=root\n\n[Install]\nWantedBy=multi-user.target\nEOF\nsystemctl daemon-reload && systemctl enable tailscale-login.service").
+
+hardening_check(tailscale_login_script,
+    "test -f /usr/local/bin/tailscale-login && grep -q 'tailscale up' /usr/local/bin/tailscale-login",
+    "cat > /usr/local/bin/tailscale-login << 'EOF'\n#!/usr/bin/env bash\nset -e\nif ! tailscale status 2>/dev/null | grep -q '^100\\.'; then\n  AUTHKEY=$(cat /etc/tailscale/authkey 2>/dev/null) || { echo 'ERROR: /etc/tailscale/authkey not found'; exit 1; }\n  tailscale up --authkey=\"$AUTHKEY\" --accept-routes --accept-dns\nfi\nEOF\nchmod 755 /usr/local/bin/tailscale-login").

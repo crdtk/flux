@@ -12,3 +12,11 @@
 vessels-blend:
 	$(MAKE) -C demos/vessels operator/scene.blend
 	blender demos/vessels/operator/scene.blend &
+
+# Which Cycles render devices the installed Blender actually sees —
+# OPTIX rows prove the official build's GPU kernels are live (the
+# distro build never shows them; that gap is why blender.org owns the
+# install, see post/features/base/tools.pl).
+.PHONY: blender-devices
+blender-devices:
+	blender -b --python-expr "import bpy; p = bpy.context.preferences.addons['cycles'].preferences; p.refresh_devices(); [print(d.type.ljust(8), d.name) for d in p.devices]"

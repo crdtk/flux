@@ -10,6 +10,8 @@ DISK_CLEAN_USER := \
   $(USER_HOME)/Downloads/pycharm-2025.3 \
   $(USER_HOME)/Downloads/pycharm-2025.3.tar.gz \
   $(USER_HOME)/Downloads/LM-Studio-0.4.7-4-x64.deb \
+  $(USER_HOME)/Downloads/nixos-graphical-26.05.7675.02e08985a27c-x86_64-linux.iso \
+  $(USER_HOME)/Downloads/CaptureScreen.jpeg \
   $(USER_HOME)/.local/share/whisper-venv \
   $(USER_HOME)/miniforge3 \
   $(USER_HOME)/snap
@@ -50,14 +52,6 @@ venv-report:
 .PHONY: venv-clean
 venv-clean: venv-report
 	cut -f2 $(VENV_REPORT) | xargs -r rm -rf --
-	@df -h / | tail -1
-
-## Delete LM Studio state (~/Desktop/.lmstudio) — refuses if the app is still installed.
-.PHONY: lmstudio-clean
-lmstudio-clean:
-	@if command -v lmstudio >/dev/null || test -e $(USER_HOME)/.local/share/applications/lm-studio.desktop; then \
-	  echo ">>> LM Studio still installed — not removing its state"; exit 1; fi
-	rm -rf $(USER_HOME)/Desktop/.lmstudio
 	@df -h / | tail -1
 
 ## Reclaim user-owned space: caches + spent installers (root half: sudo make disk-clean-root).

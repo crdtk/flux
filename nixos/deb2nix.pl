@@ -12,6 +12,7 @@
 :- consult('post/post.pl').
 
 nix_name(flameshot,                 flameshot).
+nix_name(gimp,                      gimp).
 nix_name(gwenview,                  'kdePackages.gwenview').
 nix_name('libheif-examples',        libheif).
 nix_name('kimageformat-plugins',    'kdePackages.kimageformats').
@@ -22,10 +23,12 @@ nix_name(rclone,                    rclone).
 nix_name(xclip,                     xclip).
 nix_name(jq,                        jq).
 nix_name(plantuml,                  plantuml).
+nix_name(planner,                   planner).
 nix_name(f3d,                       f3d).
 nix_name(npm,                       nodejs).
 nix_name(bleachbit,                 bleachbit).
 nix_name(filelight,                 'kdePackages.filelight').
+nix_name(imagemagick,               imagemagick).
 nix_name(ncdu,                      ncdu).
 nix_name('czkawka-gui',             'czkawka-full').
 nix_name('czkawka-cli',             czkawka).
@@ -38,6 +41,7 @@ nix_name(ausweisapp,                ausweisapp).
 nix_name(vlc,                       vlc).
 nix_name(kdeconnect,                'kdePackages.kdeconnect-kde').
 nix_name(git,                       git).
+nix_name('openjdk-21-jre',          'openjdk21').
 nix_name('arp-scan',                'arp-scan').
 nix_name(nmap,                      nmap).
 nix_name(pciutils,                  pciutils).

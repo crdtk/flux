@@ -24,9 +24,11 @@
     flameshot
     gcc14
     gh
+    gimp
     git
     # grafana — service: services.grafana
     kdePackages.gwenview
+    imagemagick
     jq
     kdePackages.kdeconnect-kde
     kdePackages.kdenlive
@@ -40,13 +42,17 @@
     nmap
     nodejs
     obs-studio
+    openjdk21
     # openssh-server — service: services.openssh
+    # TODO(unmapped): ovmf
     pciutils
     plank
+    planner
     plantuml
     # plasma-session-x11 — comes with services.desktopManager.plasma6
     kdePackages.kdeplasma-addons
     # prometheus — service: services.prometheus
+    # TODO(unmapped): qemu-system-x86
     rclone
     sane-airscan
     simple-scan

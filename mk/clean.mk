@@ -11,11 +11,9 @@ endef
 clean:
 ifeq ($(shell id -u),0)
 	rm -rf $(CURDIR)/.venv
-	rm -rf $(CURDIR)/demos/LLMs-from-scratch/venv
 	rm -f /usr/share/applications/code.desktop /usr/share/applications/pycharm-community.desktop
 	rm -f $(DOWNLOADS_DIR)/cuda-keyring_1.1-1_all.deb /etc/apt/sources.list.d/cuda-ubuntu*-x86_64.list
 	rm -f /etc/apt/preferences.d/no-snapd
-	rm -rf /etc/crucible
 	rm -f /etc/systemd/system/packagekit.service
 	systemctl disable --now mnt-backup.automount mnt-backup.mount 2>/dev/null || true
 	rm -f /etc/systemd/system/mnt-backup.automount /etc/systemd/system/mnt-backup.mount
@@ -29,7 +27,6 @@ else
 	rm -f $(USER_HOME)/.local/share/applications/pycharm-community.desktop
 	rm -f $(USER_HOME)/.config/kwalletrc
 	rm -f $(USER_HOME)/.config/autostart/enable-*.desktop
-	rm -rf $(USER_HOME)/.local/share/jupyter/kernels/turboquant
 	kpackagetool6 -t Plasma/Applet -r com.github.antroids.application-title-bar 2>/dev/null || true
 	kpackagetool6 -t Plasma/Applet -r Plasma.Flex.Hub 2>/dev/null || true
 	kpackagetool6 -t Plasma/Applet -r com.github.chrtall.kppleMenu 2>/dev/null || true

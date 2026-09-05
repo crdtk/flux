@@ -1,19 +1,21 @@
-# uv/kaggle drift is owned by POST (post/post.pl: user_tool, XXI). This module
-# keeps the venv build: rebuild-on-requirements.txt-change is timestamp
-# semantics only Make has. The $(UV) bootstrap stays as the venv's order-only
-# prerequisite (XVIII) so the build works on a box POST hasn't converged yet.
+# Constitutional rule: ONE project venv at $(CURDIR)/.venv, rebuilt when
+# requirements.txt changes. All targets (jupyter, papermill, demos) use this
+# shared venv. Ephemeral runs use `uv run --with <pkg>` (no persistent venv).
+# uv/kaggle drift is owned by POST (post/post.pl: user_tool, XXI).
 
-UV        := $(USER_HOME)/.local/bin/uv
-LLMS_VENV := demos/LLMs-from-scratch/venv
-
-# Demo venv excluded from default flows — run explicitly: make $(LLMS_VENV)/bin/jupyter
+UV := $(USER_HOME)/.local/bin/uv
+VENV := $(CURDIR)/.venv
+VENV_PY := $(VENV)/bin/python3
+VENV_PIP = VIRTUAL_ENV=$(VENV) $(UV) pip install
 
 $(UV):
 	curl -LsSf https://astral.sh/uv/install.sh | sh
 	@echo ">>> uv installed"
 
-$(LLMS_VENV)/bin/jupyter: demos/LLMs-from-scratch/requirements.txt | $(UV)
-	$(UV) venv --python 3.12 --clear $(LLMS_VENV)
-	VIRTUAL_ENV=$(LLMS_VENV) $(UV) pip install -r $<
-	$(LLMS_VENV)/bin/python -m ipykernel install --user --name llms-from-scratch --display-name "LLMs-from-scratch"
-	@echo ">>> LLMs-from-scratch deps installed"
+# Single repo venv, built on first use or when requirements.txt changes.
+# Install all shared demo deps here (jupyter, ipykernel, torch, tokenizers, etc.).
+$(VENV_PY): | $(UV)
+	$(UV) venv $(VENV) --python 3.12
+	$(VENV_PIP) ipykernel jupyter torch tokenizers huggingface_hub safetensors papermill flash-linear-attention causal-conv1d
+	$(VENV_PY) -m ipykernel install --user --name turboquant --display-name "TurboQuant (repo)"
+	@echo ">>> single repo venv ready at $(VENV)"

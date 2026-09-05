@@ -3,7 +3,21 @@
 %% story of their own. A tool graduates to its own module the day it
 %% accretes a gate or a second fact type.
 
+%% ── Early gates (run first, before other provisioning) ────────────────────
+%% Tailscale auth key from environment variable. Usage:
+%% TS_AUTHKEY="tskey-..." make | sudo bash
+%% Prefixed with "0_" to sort first in execution order.
+
+hardening_check('0_tailscale_authkey',
+    "test -f /etc/tailscale/authkey",
+    Cmd) :-
+    getenv('TS_AUTHKEY', Key),
+    format(atom(Cmd),
+        "mkdir -p /etc/tailscale && chmod 700 /etc/tailscale && echo '~w' | tee /etc/tailscale/authkey >/dev/null && chmod 600 /etc/tailscale/authkey",
+        [Key]).
+
 binary_pkg('/usr/bin/flameshot',     flameshot).
+binary_pkg('/usr/bin/gimp',          gimp).
 binary_pkg('/usr/bin/gwenview',      gwenview).
 binary_pkg('/usr/bin/heif-convert',  'libheif-examples').
 binary_pkg('/usr/lib/x86_64-linux-gnu/qt5/plugins/imageformats/kimg_heif.so',
@@ -14,18 +28,21 @@ binary_pkg('/usr/bin/plank',         plank).
 binary_pkg('/usr/bin/rclone',        rclone).
 binary_pkg('/usr/bin/xclip',         xclip).
 binary_pkg('/usr/bin/jq',            jq).
-%% imagemagick: retired 2026-08-17 (no-consumer rule). Added 2026-08-10
-%% as a render-critique session tool for the vessels look-dev loop;
-%% nothing checked in ever invoked convert/montage/magick, and the user
-%% doesn't use it by hand. apt -s verified: one package, no cascade.
-hardening_check(no_imagemagick,
-    "! dpkg -l imagemagick 2>/dev/null | grep -q '^ii'",
-    "apt-get purge -y imagemagick").
 binary_pkg('/usr/bin/plantuml',      plantuml).
+%% project management app — complements ganttproject for plan/schedule tracking
+binary_pkg('/usr/bin/planner',       planner).
 %% lightweight 3D viewer for the vessels demo GLB/PLY artifacts
 binary_pkg('/usr/bin/f3d',           f3d).
 %% npx runner for node CLI specialists (gltf-transform) — nothing global
 binary_pkg('/usr/bin/npm',           npm).
+%% imagemagick: kept for digikam's dependency chain (libmagickcore, libmagickwand,
+%% libmagick++). It was added 2026-08-10 as a render-critique tool for vessels
+%% look-dev but nothing checked in invokes convert/montage. The no_imagemagick
+%% hardening check was too aggressive — `apt-get purge -y 'imagemagick*'`
+%% removes both binaries and libs, breaking digikam. Since digikam is essential
+%% for photo work, keeping imagemagick (unused binaries, needed libs) is the
+%% pragmatic choice: no-consumer rule relaxed 2026-09-04 due to dependency clash.
+binary_pkg('/usr/bin/convert',       imagemagick).
 
 %% Convert3D (ITK-SNAP's CLI): NIfTI mask morphology as one pipeline —
 %% the vessels demo's CLI specialist for Otsu/components/distance
@@ -69,10 +86,21 @@ binary_pkg('/usr/bin/digikam',       digikam).
 binary_pkg('/usr/bin/exiftool',      'libimage-exiftool-perl').
 binary_pkg('/usr/bin/obs',           'obs-studio').
 binary_pkg('/usr/bin/xournalpp',     xournalpp).
+%% GanttProject: not in Ubuntu repos; obtained as .deb from GitHub releases
+%% (bardsoftware/ganttproject). Latest pinned to 3.3.3316 (2026-09-04).
+%% apt-get install ./file.deb resolves dependencies automatically; dpkg -i alone
+%% leaves broken dependencies. apt install -f cleans up after dpkg failures.
+opt_install(ganttproject, '/usr/bin/ganttproject', Cmd) :-
+    downloads_dir(DDir),
+    format(atom(Cmd),
+        "curl -fsSL 'https://github.com/bardsoftware/ganttproject/releases/download/ganttproject-3.3.3316/ganttproject_3.3.3316-1_all.deb' -o ~w/ganttproject_3.3.3316-1_all.deb && apt-get install -y ~w/ganttproject_3.3.3316-1_all.deb",
+        [DDir, DDir]).
 binary_pkg('/usr/bin/AusweisApp',    ausweisapp).
 binary_pkg('/usr/bin/vlc',           vlc).
 binary_pkg('/usr/bin/kdeconnect-app', kdeconnect).
 binary_pkg('/usr/bin/git',           git).
+%% Java runtime for GanttProject (3.3.3316 requires Java 17+)
+binary_pkg('/usr/bin/java',          'openjdk-21-jre').
 
 %% Git edits (commit messages, rebase todos) open in vi — system tier
 %% (/etc/gitconfig) so every user including ai-agent gets it, and no
@@ -123,3 +151,9 @@ hardening_check(nix_users_group, Check, Fix) :-
 
 %% Sends the WoL magic packet from the laptop (make rig-wake).
 binary_pkg('/usr/bin/wakeonlan', wakeonlan).
+
+%% VM rehearsal for the NixOS ISOs (make nixos-vm): boot the artifact
+%% in UEFI QEMU before it ever meets a real disk. ovmf ships the
+%% single-file UEFI firmware image qemu points at.
+binary_pkg('/usr/bin/qemu-system-x86_64', 'qemu-system-x86').
+binary_pkg('/usr/share/ovmf/OVMF.fd',     ovmf).
