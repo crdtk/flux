@@ -39,7 +39,7 @@
 #       Order-only (|) voids $< — reference paths explicitly.
 # VIII. PRIVILEGE. No sudo inside recipes — a target either runs at the caller's
 #       privilege or names the escalation explicitly in its documented invocation
-#       (make agent-login). Prefer user-space, escalate only when the path demands it.
+#       (make bmc-enroll). Prefer user-space, escalate only when the path demands it.
 #       Package installation is POST's alone (XXI) — make recipes never apt.
 # IX.   VARIABLE LOCALITY. Define each variable just above and before its first use;
 #       name every shell subexpression; inline single-use values, derive paths from
@@ -107,7 +107,7 @@
 # XXI.  POST OWNS STATE. POST alone provisions, detects and repairs drift-state;
 #       make keeps only what POST cannot express: timestamp-dependent builds
 #       (venvs rebuilt when requirements.txt changes), inverses (clean, eject),
-#       and interactive targets (agent-login). Every stateful outcome
+#       and interactive targets (bmc-enroll). Every stateful outcome
 #       the setup depends on earns a POST rule: an unprivileged, read-only,
 #       cheap check probing the CONTENT that matters — an existence-only check
 #       is a sentinel in the sense of I (a kwalletrc that existed but lacked
@@ -117,7 +117,7 @@
 # XXII. PIPE IS ACCEPTANCE. stderr is the human-readable plan, stdout the fix
 #       commands; nothing applies without piping, and the human pipes the root
 #       phase — never an agent (sudo is denied to agents in depth: sudoers
-#       timestamp_timeout=0, Claude deny rule, ai-agent sandbox). The plan is
+#       timestamp_timeout=0, Claude deny rule). The plan is
 #       privilege-agnostic: one stream, each command guarded for its privilege.
 #       `make | bash` applies user-level fixes in the caller's own session
 #       (real DISPLAY/DBus, no impersonation) and stops at a sentinel naming
@@ -135,7 +135,7 @@
 #       demotion names its evidence. Never hardcode the winner.
 # XXIV. HUMAN-ONLY STEPS WARN. A fix needing interaction (OAuth login, greeter
 #       choice) is never emitted as a command — diagnose WARNs and names the make
-#       target the human runs (make agent-login). Build-rule deps
+#       target the human runs (make bmc-enroll). Build-rule deps
 #       are single-level, each goal declaring only its immediate predecessor —
 #       the chain encodes causality, as XIV does for prerequisites.
 # XXV.  FILE BY FATE. post/post.pl is the generic engine (sensing, diagnosis,

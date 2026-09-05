@@ -4,10 +4,9 @@
 %% right after `| sudo bash`). timestamp_timeout=0 kills the cache:
 %% sudo -n always fails, every escalation needs a live human at the
 %% prompt. visudo -cf guards the install — a syntactically broken drop-in
-%% would lock sudo out entirely. The existence check mirrors
-%% 50-claude-safe (content is 0440 root). The Claude Code deny rule is the
-%% agent-side layer; the ai-agent sandbox (agents/claude-safe) is the hard
-%% guarantee.
+%% would lock sudo out entirely. Existence check only: the content is
+%% 0440 root, unreadable to the unprivileged sensing pass. The Claude Code
+%% deny rule below is the agent-side layer.
 
 hardening_check(sudo_no_cached_ticket,
     "test -f /etc/sudoers.d/60-no-cached-ticket",

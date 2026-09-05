@@ -35,6 +35,11 @@ binary_pkg('/usr/bin/planner',       planner).
 binary_pkg('/usr/bin/f3d',           f3d).
 %% npx runner for node CLI specialists (gltf-transform) — nothing global
 binary_pkg('/usr/bin/npm',           npm).
+%% Claude Code itself — the one global npm install; needs npm above.
+service_check(claude_bin,
+    "test -x /usr/local/bin/claude",
+    "npm install -g @anthropic-ai/claude-code").
+service_deps(claude_bin, [packages_installed]).
 %% imagemagick: kept for digikam's dependency chain (libmagickcore, libmagickwand,
 %% libmagick++). It was added 2026-08-10 as a render-critique tool for vessels
 %% look-dev but nothing checked in invokes convert/montage. The no_imagemagick
@@ -103,7 +108,7 @@ binary_pkg('/usr/bin/git',           git).
 binary_pkg('/usr/bin/java',          'openjdk-21-jre').
 
 %% Git edits (commit messages, rebase todos) open in vi — system tier
-%% (/etc/gitconfig) so every user including ai-agent gets it, and no
+%% (/etc/gitconfig) so every user gets it, and no
 %% fallback to the `editor` alternative, which dangles now that nano
 %% is purged (debloat.pl no_nano). vi ships as vim.tiny.
 hardening_check(git_editor_vi,
