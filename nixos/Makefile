@@ -1,13 +1,16 @@
 # NixOS-alongside (laptop): build the self-installing USB from flake.nix.
-# nix itself (nix-bin + daemon + group) is POST-provisioned; these targets are
+# nix itself (nix-bin + daemon + group + flakes enabled system-wide,
+# base/tools.pl nix_flakes_enabled) is POST-provisioned; these targets are
 # builds and a destructive interactive write — the make-side of the split.
 # Operates from both root (make nixos-iso) and cd nixos && make nixos-iso.
+# "experimental feature 'nix-command' is disabled" means the root POST
+# pass has not run yet on this machine — not a flag to add here.
 
 # Shared variables (passed when included from root; defaults when run standalone).
 USER_HOME  ?= $(shell getent passwd $${SUDO_USER:-$$(whoami)} | cut -d: -f6)
 NIXOS_DIR  := $(dir $(lastword $(MAKEFILE_LIST)))
 
-NIX := nix --extra-experimental-features 'nix-command flakes'
+NIX := nix
 
 ## Build the self-installing NixOS ISO (result symlink at nixos/result).
 .PHONY: nixos-iso

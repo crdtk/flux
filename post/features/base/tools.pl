@@ -145,6 +145,14 @@ config_patch(heif_mime_types,
 binary_pkg('/usr/bin/nix', 'nix-bin').
 binary_pkg('/usr/lib/systemd/system/nix-daemon.service', 'nix-setup-systemd').
 
+%% Flakes are how this tree uses Nix (nixos/flake.nix); the daemon's
+%% default leaves them off, so every call had to carry the flag — and
+%% calls made by tools on our behalf (home-manager's inner nix) could
+%% not. Enable once, system-wide.
+hardening_check(nix_flakes_enabled,
+    "grep -qE '^experimental-features.*nix-command.*flakes' /etc/nix/nix.conf",
+    "mkdir -p /etc/nix && printf 'experimental-features = nix-command flakes\\n' >> /etc/nix/nix.conf && systemctl restart nix-daemon.service").
+
 service_check(nix_daemon,
     "systemctl is-enabled nix-daemon.socket >/dev/null 2>&1",
     "systemctl enable --now nix-daemon.socket").

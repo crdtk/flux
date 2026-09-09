@@ -13,9 +13,11 @@
 %%
 %% Top: kppleMenu | title widget | GLOBAL MENU (appmenu) | spacer |
 %% net speed | tray | clock | kup | clipboard | kscreen | cpu | kdeconnect |
-%% net | notifications | print | battery | weather (DWD) | brightness. The JS is
-%% single-quote-free by construction — the gdbus call wraps it in single
-%% quotes. Bottom: auto-hide dock (kickoff + dashboard + icontasks).
+%% net | notifications | print | battery | weather (DWD) | brightness. The JS
+%% lives beside this file in panels/*.js and reaches plasmashell as
+%% "$(cat …)" — it must contain no $ or backtick (bash expands those
+%% inside double quotes). Bottom: auto-hide dock (kickoff + dashboard +
+%% icontasks).
 %% Weather placeInfo format is place_name|station_id (ion_dwd.cpp): the name
 %% is display-only, the id (10389, DWD MOSMIX) drives the API. The tray must
 %% never host weather: its hidden auto-instance segfaults plasmashell on exit
@@ -48,86 +50,13 @@ user_config(widget(Id), Check, Fix) :-
         "rm -rf '/tmp/~w' && git clone --depth 1 ~w '/tmp/~w' && kpackagetool6 -t Plasma/Applet -i '/tmp/~w/~w'; rm -rf '/tmp/~w'",
         [Id, Repo, Id, Id, Sub, Id]).
 
-top_panel_js(JS) :-
-    atomic_list_concat([
-        'function mkTop(s) {',
-        'var p = new Panel;',
-        'p.location = "top";',
-        'p.screen = s;',
-        'p.addWidget("com.github.chrtall.kppleMenu");',
-        'var t = p.addWidget("com.github.antroids.application-title-bar");',
-        't.currentConfigGroup = ["Appearance"];',
-        't.writeConfig("widgetElements", ["windowTitle"]);',
-        't.writeConfig("overrideElementsMaximized", true);',
-        't.writeConfig("widgetElementsMaximized", ["windowCloseButton", "windowMinimizeButton", "windowMaximizeButton", "windowTitle"]);',
-        't.writeConfig("windowTitleSource", 0);',
-        't.writeConfig("windowTitleSourceMaximized", 0);',
-        't.writeConfig("windowTitleFontSize", 10);',
-        't.writeConfig("windowTitleUndefined", "Plasma");',
-        'p.addWidget("org.kde.plasma.appmenu");',
-        'p.addWidget("org.kde.plasma.panelspacer");',
-        'var n = p.addWidget("org.kde.plasma.systemmonitor");',
-        'n.currentConfigGroup = ["Appearance"];',
-        'n.writeConfig("chartFace", "org.kde.ksysguard.textonly");',
-        'n.writeConfig("title", "Net");',
-        'n.currentConfigGroup = ["Sensors"];',
-        'n.writeConfig("highPrioritySensorIds", ["network/all/download", "network/all/upload"]);',
-        'var s = p.addWidget("org.kde.plasma.systemtray");',
-        's.currentConfigGroup = ["General"];',
-        's.writeConfig("extraItems", ["org.kde.plasma.volume", "org.kde.plasma.brightness", "org.kde.plasma.mediacontroller", "org.kde.plasma.networkmanagement"]);',
-        's.writeConfig("knownItems", ["org.kde.plasma.weather"]);',
-        'var c = p.addWidget("org.kde.plasma.digitalclock");',
-        'c.currentConfigGroup = ["Appearance"];',
-        'c.writeConfig("dateDisplayFormat", "BesideTime");',
-        'c.writeConfig("use24hFormat", 2);',
-        'c.writeConfig("autoFontAndSize", false);',
-        'c.writeConfig("fontSize", 14);',
-        'c.writeConfig("dateFormat", "custom");',
-        'c.writeConfig("customDateFormat", "dd.MM.yy |");',
-        %% right wing, hand-arranged 2026-08-16 and adopted verbatim:
-        %% status/utility singles the tray popup would hide a click away
-        'p.addWidget("org.kde.kupapplet");',
-        'p.addWidget("org.kde.plasma.clipboard");',
-        'p.addWidget("org.kde.kscreen");',
-        'p.addWidget("org.kde.plasma.systemmonitor.cpucore");',
-        'p.addWidget("org.kde.kdeconnect");',
-        'p.addWidget("org.kde.plasma.systemmonitor.net");',
-        'p.addWidget("org.kde.plasma.notifications");',
-        'p.addWidget("org.kde.plasma.printmanager");',
-        'p.addWidget("org.kde.plasma.battery");',
-        'var w2 = p.addWidget("org.kde.plasma.weather");',
-        'w2.currentConfigGroup = ["WeatherStation"];',
-        'w2.writeConfig("provider", "dwd");',
-        'w2.writeConfig("placeInfo", "Berlin-Alex.|10389");',
-        'w2.writeConfig("placeDisplayName", "Berlin-Alex.");',
-        'w2.currentConfigGroup = ["Appearance"];',
-        'w2.writeConfig("showTemperatureInCompactMode", true);',
-        'p.addWidget("org.kde.plasma.brightness");',
-        '}',
-        'var have = panels().filter(function(q) { return q.location == "top"; }).map(function(q) { return q.screen; });',
-        'for (var i = 0; i < screenCount; i++) { if (have.indexOf(i) < 0) { mkTop(i); } }'
-    ], ' ', JS).
-
-top_panel_check_js(JS) :-
-    atomic_list_concat([
-        'var have = panels().filter(function(q) { return q.location == "top"; }).map(function(q) { return q.screen; });',
-        'var m = 0;',
-        'for (var i = 0; i < screenCount; i++) { if (have.indexOf(i) < 0) { m += 1; } }',
-        'print(m == 0 ? "OK" : "MISSING" + m);'
-    ], ' ', JS).
-bottom_panel_js(JS) :-
-    atomic_list_concat([
-        'var d = new Panel;',
-        'd.location = "bottom";',
-        'd.height = 60;',
-        'd.hiding = "autohide";',
-        'd.lengthMode = "fit";',
-        'd.floating = false;',
-        'd.opacity = "opaque";',
-        'd.addWidget("org.kde.plasma.kickoff");',
-        'd.addWidget("org.kde.plasma.applicationdashboard");',
-        'd.addWidget("org.kde.plasma.icontasks");'
-    ], ' ', JS).
+%% The Plasma scripts are files beside this module (panels/*.js): real
+%% line breaks, diffable, no quoting layer. They are read at APPLY time,
+%% so the plan carries a path, not two kilobytes of quoted JS — `make`
+%% stays readable in a terminal and identical in a pipe.
+panel_script(File, Path) :-
+    project_dir(Root),
+    format(atom(Path), '~w/post/features/desktop/panels/~w', [Root, File]).
 
 %% Panels restore from appletsrc via KConfig watchers, so a dead or failed
 %% plasmashell makes every panel fix a silent no-op — recover it first.
@@ -153,13 +82,13 @@ advisory(user_config, plasmashell_active,
 %% hostage. The advisory above already tells the human it is deferred.
 user_config(top_panel, Check, Fix) :-
     shell_ok("pgrep -x kwin_wayland >/dev/null || pgrep -x kwin_x11 >/dev/null"),
-    top_panel_check_js(CheckJS),
+    panel_script('top-check.js', CheckJS),
     format(atom(Check),
-        "gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell --method org.kde.PlasmaShell.evaluateScript '~w' 2>/dev/null | grep -q OK",
+        "gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell --method org.kde.PlasmaShell.evaluateScript \"$(cat ~w)\" 2>/dev/null | grep -q OK",
         [CheckJS]),
-    top_panel_js(JS),
+    panel_script('top.js', JS),
     format(atom(Fix),
-        "gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell --method org.kde.PlasmaShell.evaluateScript '~w' >/dev/null",
+        "gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell --method org.kde.PlasmaShell.evaluateScript \"$(cat ~w)\" >/dev/null",
         [JS]).
 user_config(bottom_panel, Check, Fix) :-
     shell_ok("pgrep -x kwin_wayland >/dev/null || pgrep -x kwin_x11 >/dev/null"),
@@ -167,9 +96,9 @@ user_config(bottom_panel, Check, Fix) :-
     format(atom(Check),
         "grep -q 'location=4' ~w/.config/plasma-org.kde.plasma.desktop-appletsrc 2>/dev/null",
         [Home]),
-    bottom_panel_js(JS),
+    panel_script('bottom.js', JS),
     format(atom(Fix),
-        "gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell --method org.kde.PlasmaShell.evaluateScript '~w' >/dev/null",
+        "gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell --method org.kde.PlasmaShell.evaluateScript \"$(cat ~w)\" >/dev/null",
         [JS]).
 
 %% Screen-space: maximized windows lose their titlebar (the top panel's
